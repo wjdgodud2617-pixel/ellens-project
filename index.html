@@ -35,6 +35,11 @@
         <div class="section-head"><h2>Daily priorities</h2><button id="completeAllBtn" class="text-btn">Complete all</button></div>
         <div id="priorityGrid" class="priority-grid"></div>
 
+
+        <div class="section-head"><h2>Today's meal plan</h2><button id="regenerateMealsBtn" class="text-btn">Regenerate</button></div>
+        <div id="nutritionTargetCard" class="nutrition-target panel-lite"></div>
+        <div id="mealPlanList" class="meal-plan-list"></div>
+
         <div class="workout-datebar panel-lite">
           <button id="prevDayBtn" class="icon-btn" aria-label="Previous day">‹</button>
           <div><p class="eyebrow" id="workoutDayLabel">TODAY</p><h2 id="workoutDateLabel"></h2><p id="routineName" class="muted"></p></div>
@@ -84,7 +89,24 @@
       </section>
 
       <section id="settings" class="view" aria-label="Settings">
-        <div class="section-head"><h2>Goals</h2></div>
+
+        <div class="section-head"><div><p class="eyebrow">PERSONAL PROFILE</p><h2>Body & nutrition setup</h2></div></div>
+        <div class="quick-grid settings-profile-grid">
+          <label class="field-card"><span>Display name</span><input id="displayName" type="text" maxlength="30" /></label>
+          <label class="field-card"><span>Sex</span><select id="sexSetting"><option value="female">Female</option><option value="male">Male</option></select></label>
+          <label class="field-card"><span>Age</span><input id="ageSetting" type="number" min="18" max="100" /></label>
+          <label class="field-card"><span>Height (cm)</span><input id="heightSetting" type="number" min="100" max="230" step="0.1" /></label>
+          <label class="field-card"><span>Current weight (kg)</span><input id="currentWeightSetting" type="number" min="30" max="300" step="0.1" /></label>
+          <label class="field-card"><span>Body fat (%)</span><input id="currentBodyFatSetting" type="number" min="3" max="70" step="0.1" /></label>
+          <label class="field-card"><span>Goal weight (kg)</span><input id="goalWeightSetting" type="number" min="30" max="300" step="0.1" /></label>
+          <label class="field-card"><span>Goal</span><select id="goalMode"><option value="fatloss">Fat loss + muscle retention</option><option value="loss">Weight loss</option><option value="maintain">Maintain</option><option value="gain">Muscle gain</option><option value="hyrox">HYROX performance</option><option value="manual">Manual targets</option></select></label>
+          <label class="field-card"><span>Activity</span><select id="activitySetting"><option value="1.2">Mostly seated</option><option value="1.375">Light, 1–3 sessions/week</option><option value="1.55">Moderate, 3–5 sessions/week</option><option value="1.725">High, 6–7 sessions/week</option></select></label>
+          <label class="field-card"><span>Meals per day</span><select id="mealCountSetting"><option value="3">3 meals</option><option value="4">3 meals + snack</option></select></label>
+        </div>
+        <div class="form-row"><button id="autoNutritionBtn" class="primary-btn" type="button">Calculate & create meal plan</button><button id="saveProfileBtn" class="secondary-btn" type="button">Save profile</button></div>
+        <p id="nutritionCalcNote" class="fine-print"></p>
+
+        <div class="section-head"><h2>Daily nutrition targets</h2></div>
         <div class="quick-grid">
           <label class="field-card"><span>Water goal (ml)</span><input id="waterGoal" type="number" step="250" /></label>
           <label class="field-card"><span>Sleep goal (hours)</span><input id="sleepGoal" type="number" step="0.25" /></label>
