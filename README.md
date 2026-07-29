@@ -1,3 +1,14 @@
+# ELLEN'S PROJECT v3.0 MOBILE
+
+Mobile-first fitness OS with Supabase sync.
+
+## v3.0 changes
+- Mobile UI centred and width-safe on iPhone and Galaxy
+- Safe-area support for notches and home indicators
+- Responsive meal, workout, settings and calendar cards
+- Larger touch targets and mobile-friendly dialogs
+- Existing food search, calorie totals, nutrition targets and cloud sync retained
+
 # ELLEN'S PROJECT
 
 **Smile. Train. Become the Machine.**

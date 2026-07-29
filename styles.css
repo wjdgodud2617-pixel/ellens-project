@@ -19,3 +19,74 @@
 
 /* v2.3 searchable food log */
 .food-modal{max-height:88vh;overflow:auto}.food-search-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}.food-search-row input{background:transparent;border:1px solid var(--line);border-radius:12px;color:var(--text);padding:12px}.inline-btn{width:auto;margin:0;padding:11px 12px}.food-results{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:12px 0}.food-result{display:flex;flex-direction:column;align-items:flex-start;gap:4px;border:1px solid var(--line);border-radius:12px;background:var(--panel2);color:var(--text);padding:11px;text-align:left}.food-result span,.meal-food-row small{color:var(--muted);font-size:.75rem}.food-serving{border:1px solid var(--accent);border-radius:16px;padding:14px;margin-top:12px}.meal-food-list{display:grid;gap:8px}.meal-food-row{display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid var(--line);padding:9px 0}.meal-food-row div{display:grid;gap:3px}.meal-total{display:flex;justify-content:space-between;align-items:center;margin-top:12px;border-radius:14px;background:var(--panel2);padding:14px}.meal-total strong{font-size:1.25rem}.meal-total span{color:var(--muted);font-size:.8rem}@media(max-width:560px){.food-search-row{grid-template-columns:1fr}.food-results{grid-template-columns:1fr}.meal-total{align-items:flex-start;flex-direction:column;gap:4px}}
+
+/* v3.0 mobile-first layout stabilisation */
+html{width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%}
+body{width:100%;overflow-x:hidden;min-height:100dvh}
+#app{width:100%;max-width:100%;overflow-x:clip}
+.topbar,main{width:100%;min-width:0}
+.topbar>*{min-width:0}
+.topbar h1,.slogan,.meal-plan-card h3,.exercise-card h3{overflow-wrap:anywhere}
+img,video,iframe,svg{max-width:100%}
+input,select,textarea,button{max-width:100%}
+
+@media(max-width:759px){
+  :root{--radius:18px;--shadow:0 12px 32px rgba(0,0,0,.22)}
+  body{background:radial-gradient(circle at 90% 0,#1a2718 0,transparent 28%),var(--bg)}
+  .topbar{padding:calc(18px + env(safe-area-inset-top)) 16px 10px;align-items:center;gap:12px}
+  .topbar>div{flex:1;min-width:0}
+  .topbar h1{font-size:clamp(1.45rem,7vw,2rem);line-height:1.12}
+  .slogan{font-size:.83rem;white-space:normal}
+  main{padding:6px 16px calc(96px + env(safe-area-inset-bottom));margin:0 auto}
+  .score-card,.panel{padding:18px}
+  .score-card{gap:12px;align-items:center}
+  .score-card>div:first-child{min-width:0;flex:1}
+  .ring{width:82px;height:82px;flex:0 0 82px}
+  .ring:after{inset:7px}
+  .score-line{gap:8px}
+  .score-line strong{font-size:2.6rem}
+  .score-line span{font-size:1.55rem}
+  .coach-line{font-size:.88rem;line-height:1.45}
+  .section-head{margin:24px 2px 10px;gap:10px;align-items:center}
+  .section-head h2{font-size:1rem;line-height:1.25}
+  .section-head>div{min-width:0;flex-wrap:wrap}
+  .text-btn{font-size:.78rem;white-space:nowrap;padding:8px 2px}
+  .priority-grid,.quick-grid,.settings-profile-grid{grid-template-columns:1fr 1fr;gap:9px}
+  .priority-card{min-height:88px;padding:13px}
+  .field-card,.memo-card{min-width:0;padding:13px}
+  .field-card input,.field-card select{width:100%;font-size:16px}
+  .meal-plan-list,.weekly-plan-grid{grid-template-columns:1fr}
+  .meal-plan-card{grid-template-columns:auto minmax(0,1fr);padding:14px;align-items:start}
+  .meal-actions{grid-column:2;width:100%;margin:4px 0 0;justify-content:flex-start}
+  .meal-actions .mini-edit{flex:1;min-height:38px}
+  .nutrition-target{align-items:flex-start;flex-direction:column}
+  .nutrition-target h3{font-size:1.45rem}
+  .workout-datebar{grid-template-columns:42px minmax(0,1fr) 42px;gap:8px;padding:12px}
+  .workout-datebar .icon-btn{width:40px;height:40px}
+  .workout-datebar h2{font-size:.98rem;overflow-wrap:anywhere}
+  .exercise-card{grid-template-columns:auto minmax(0,1fr) auto;padding:13px;gap:10px}
+  .exercise-card .mini-edit{padding:8px}
+  .calendar-toolbar{padding:2px 0 8px}
+  .weekdays,.calendar-grid{gap:4px}
+  .day{border-radius:10px;padding:5px;font-size:.72rem;min-width:0}
+  .bars{gap:5px;padding:14px 10px}
+  .form-row{grid-template-columns:1fr}
+  .form-row .primary-btn,.form-row .secondary-btn{margin-top:0}
+  .bottom-nav{left:0;right:0;bottom:0;transform:none;width:100%;max-width:none;padding:7px 6px calc(7px + env(safe-area-inset-bottom));overflow:hidden}
+  .bottom-nav button{min-width:0;font-size:.64rem;padding:7px 0;line-height:1.15}
+  .bottom-nav button span{font-size:1.12rem}
+  .modal{width:calc(100vw - 24px);max-width:none;max-height:calc(100dvh - 24px);padding:20px 16px;margin:auto;overflow:auto}
+  .food-modal{max-height:calc(100dvh - 24px)}
+  .food-search-row{grid-template-columns:1fr}
+  .food-results{grid-template-columns:1fr}
+  .meal-total{align-items:flex-start;flex-direction:column;gap:5px}
+}
+
+@media(max-width:390px){
+  .topbar{padding-left:14px;padding-right:14px}
+  main{padding-left:12px;padding-right:12px}
+  .priority-grid,.quick-grid,.settings-profile-grid{grid-template-columns:1fr}
+  .score-card{padding:16px}
+  .ring{width:72px;height:72px;flex-basis:72px}
+  .bottom-nav button{font-size:.58rem}
+}
