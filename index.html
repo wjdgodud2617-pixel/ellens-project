@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0d0c" />
+  <meta name="description" content="ELLEN'S PROJECT — a local-first workout, recovery and nutrition tracker." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>ELLEN'S PROJECT — Fitness OS</title>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">ELLEN'S PROJECT</p>
+        <h1 id="greeting">Good day, Ellen.</h1>
+        <p class="slogan">Smile. Train. Become the Machine.</p>
+      </div>
+      <button id="profileBtn" class="icon-btn" aria-label="Account and sync">◎</button>
+    </header>
+
+    <main>
+      <section id="today" class="view active" aria-label="Today dashboard">
+        <div class="score-card">
+          <div>
+            <p class="muted">TODAY'S SCORE</p>
+            <div class="score-line"><strong id="scoreValue">0%</strong><span id="scoreEmoji">😔</span></div>
+            <p id="coachLine" class="coach-line">You can always restart.</p>
+          </div>
+          <div class="ring" id="scoreRing" style="--score:0"><span>0</span></div>
+        </div>
+
+        <div class="section-head"><h2>Daily priorities</h2><button id="completeAllBtn" class="text-btn">Complete all</button></div>
+        <div id="priorityGrid" class="priority-grid"></div>
+
+        <div class="workout-datebar panel-lite">
+          <button id="prevDayBtn" class="icon-btn" aria-label="Previous day">‹</button>
+          <div><p class="eyebrow" id="workoutDayLabel">TODAY</p><h2 id="workoutDateLabel"></h2><p id="routineName" class="muted"></p></div>
+          <button id="nextDayBtn" class="icon-btn" aria-label="Next day">›</button>
+        </div>
+        <div class="section-head"><h2 id="workoutHeading">Today's workout</h2><div><button id="resetPlanBtn" class="text-btn">Reset plan</button><button id="addExerciseBtn" class="text-btn">+ Add</button></div></div>
+        <div id="workoutList" class="stack"></div>
+        <button id="todayWorkoutBtn" class="secondary-btn compact-btn" hidden>Return to today</button>
+
+        <div class="section-head"><h2>Quick log</h2></div>
+        <div class="quick-grid">
+          <label class="field-card"><span>Water (ml)</span><input id="waterInput" type="number" min="0" step="250" inputmode="numeric" /></label>
+          <label class="field-card"><span>Sleep (hours)</span><input id="sleepInput" type="number" min="0" max="24" step="0.25" inputmode="decimal" /></label>
+          <label class="field-card"><span>Calories</span><input id="calorieInput" type="number" min="0" step="50" inputmode="numeric" /></label>
+          <label class="field-card"><span>Protein (g)</span><input id="proteinInput" type="number" min="0" step="5" inputmode="numeric" /></label>
+        </div>
+        <label class="memo-card"><span>Daily memo</span><textarea id="memoInput" rows="3" placeholder="How did today feel?"></textarea></label>
+      </section>
+
+      <section id="plan" class="view" aria-label="Weekly plan">
+        <div class="section-head plan-title-row"><div><p class="eyebrow">REPEATING ROUTINE</p><h2>Weekly Plan</h2></div><p class="muted">Tap a day to open and customise that date.</p></div>
+        <div id="weeklyPlanGrid" class="weekly-plan-grid"></div>
+      </section>
+
+      <section id="calendar" class="view" aria-label="Calendar">
+        <div class="calendar-toolbar">
+          <button id="prevMonth" class="icon-btn" aria-label="Previous month">‹</button>
+          <h2 id="monthTitle"></h2>
+          <button id="nextMonth" class="icon-btn" aria-label="Next month">›</button>
+        </div>
+        <div class="weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+        <div id="calendarGrid" class="calendar-grid"></div>
+        <div id="daySummary" class="panel"></div>
+      </section>
+
+      <section id="progress" class="view" aria-label="Progress">
+        <div class="section-head"><h2>Body progress</h2></div>
+        <div class="quick-grid">
+          <label class="field-card"><span>Weight (kg)</span><input id="weightInput" type="number" min="0" step="0.1" /></label>
+          <label class="field-card"><span>Body fat (%)</span><input id="bodyFatInput" type="number" min="0" step="0.1" /></label>
+          <label class="field-card"><span>Waist (cm)</span><input id="waistInput" type="number" min="0" step="0.1" /></label>
+          <label class="field-card"><span>Muscle mass (kg)</span><input id="muscleInput" type="number" min="0" step="0.1" /></label>
+        </div>
+        <button id="saveBodyBtn" class="primary-btn">Save today's body record</button>
+        <div class="section-head"><h2>Last 7 days</h2></div>
+        <div id="weeklyBars" class="bars"></div>
+      </section>
+
+      <section id="settings" class="view" aria-label="Settings">
+        <div class="section-head"><h2>Goals</h2></div>
+        <div class="quick-grid">
+          <label class="field-card"><span>Water goal (ml)</span><input id="waterGoal" type="number" step="250" /></label>
+          <label class="field-card"><span>Sleep goal (hours)</span><input id="sleepGoal" type="number" step="0.25" /></label>
+          <label class="field-card"><span>Protein goal (g)</span><input id="proteinGoal" type="number" step="5" /></label>
+          <label class="field-card"><span>Calorie target</span><input id="calorieGoal" type="number" step="50" /></label>
+        </div>
+        <button id="saveSettingsBtn" class="primary-btn">Save settings</button>
+        <div class="section-head"><h2>Data</h2></div>
+        <div class="button-stack">
+          <button id="exportBtn" class="secondary-btn">Export backup</button>
+          <label class="secondary-btn file-label">Import backup<input id="importInput" type="file" accept="application/json" hidden /></label>
+          <button id="installBtn" class="secondary-btn" hidden>Install app</button>
+        </div>
+        <p class="fine-print">Cloud sync is configured. Sign in from the ◎ account button to use the same records on mobile and PC.</p>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Primary navigation">
+      <button data-view="today" class="active"><span>●</span>Today</button>
+      <button data-view="plan"><span>≡</span>Plan</button>
+      <button data-view="calendar"><span>▦</span>Calendar</button>
+      <button data-view="progress"><span>↗</span>Progress</button>
+      <button data-view="settings"><span>⚙</span>Settings</button>
+    </nav>
+  </div>
+
+  <dialog id="exerciseDialog" class="modal">
+    <form method="dialog">
+      <button class="close-btn" value="cancel" aria-label="Close">×</button>
+      <div id="exerciseDetail"></div>
+    </form>
+  </dialog>
+
+  <dialog id="addExerciseDialog" class="modal">
+    <form id="addExerciseForm">
+      <button class="close-btn" type="button" data-close="addExerciseDialog" aria-label="Close">×</button>
+      <p class="eyebrow" id="exerciseFormEyebrow">NEW EXERCISE</p><h2 id="exerciseFormTitle">Add exercise</h2>
+      <label>Name<input name="name" required placeholder="e.g. Romanian Deadlift" /></label>
+      <div class="form-row"><label>Sets<input name="sets" type="number" min="1" value="3" required /></label><label>Reps<input name="reps" type="number" min="1" value="10" required /></label></div>
+      <label>Weight (kg)<input name="weight" type="number" min="0" step="0.5" value="0" /></label>
+      <label>Target muscles<input name="target" placeholder="e.g. Glutes · Hamstrings" /></label>
+      <label>How to perform<textarea name="instructions" rows="3" placeholder="Optional technique notes"></textarea></label>
+      <label>YouTube URL or video ID<input name="youtube" placeholder="Optional" /></label>
+      <button class="primary-btn" id="exerciseFormSubmit" type="submit">Add exercise</button>
+    </form>
+  </dialog>
+
+  <dialog id="accountDialog" class="modal">
+    <form id="authForm">
+      <button class="close-btn" type="button" data-close="accountDialog" aria-label="Close">×</button>
+      <p class="eyebrow">ACCOUNT & SYNC</p><h2 id="authTitle">Local mode</h2>
+      <p id="syncStatus" class="muted">Your data is saved on this device.</p>
+      <div id="authFields">
+        <label>Email<input id="emailInput" type="email" autocomplete="email" /></label>
+        <label>Password<input id="passwordInput" type="password" minlength="6" autocomplete="current-password" /></label>
+        <div class="form-row"><button id="signInBtn" class="primary-btn" type="button">Sign in</button><button id="signUpBtn" class="secondary-btn" type="button">Create account</button></div>
+      </div>
+      <button id="syncNowBtn" class="secondary-btn" type="button">Sync now</button>
+      <button id="signOutBtn" class="danger-btn" type="button" hidden>Sign out</button>
+    </form>
+  </dialog>
+
+  <dialog id="celebrationDialog" class="celebration">
+    <div id="celebrationContent"></div>
+    <button id="celebrationClose" class="primary-btn">Keep going</button>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>if(!window.supabase){document.write('<script src="https://unpkg.com/@supabase/supabase-js@2"><\/script>')}</script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
