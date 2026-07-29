@@ -12,3 +12,7 @@
 
 .field-card select{background:transparent;border:0;border-bottom:1px solid var(--line);color:var(--text);font-size:1rem;padding:8px 0;outline:none}.field-card select option{background:var(--panel);color:var(--text)}
 .nutrition-target{display:flex;justify-content:space-between;align-items:center;gap:12px}.nutrition-target h3{font-size:1.65rem;margin:2px 0 5px}.goal-pill{border:1px solid var(--accent);color:var(--accent);border-radius:999px;padding:7px 10px;font-size:.72rem;font-weight:800;text-transform:uppercase}.meal-plan-list{display:grid;gap:10px;margin-top:10px}.meal-plan-card{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px}.meal-plan-card.done{opacity:.62;border-color:var(--accent)}.meal-plan-card h3{font-size:.95rem;margin:2px 0 5px;line-height:1.4}.meal-plan-card small{color:var(--muted)}.meal-check{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--accent);font-size:1.2rem}.settings-profile-grid{grid-template-columns:repeat(2,1fr)}@media(min-width:760px){.meal-plan-list{grid-template-columns:repeat(2,1fr)}.settings-profile-grid{grid-template-columns:repeat(3,1fr)}}
+
+/* v2.2 manual meal entry */
+.meal-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:560px){.meal-actions{width:100%;justify-content:flex-start;margin-left:42px}.meal-plan-card{flex-wrap:wrap}}
