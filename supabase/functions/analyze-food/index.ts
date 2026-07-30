@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) return jsonResponse({ error: "OPENAI_API_KEY가 Supabase Secrets에 설정되지 않았습니다." }, 500);
 
-    const { imageDataUrl, locale = "ko-KR", mode = "label" } = await req.json();
+    const { imageDataUrl, locale = "ko-KR", mode = "food" } = await req.json();
     if (typeof imageDataUrl !== "string" || !imageDataUrl.startsWith("data:image/")) {
       return jsonResponse({ error: "올바른 이미지가 전달되지 않았습니다." }, 400);
     }
@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
 - locale: ${locale}`
       : `음식 사진을 분석해 아래 JSON 객체 하나만 반환하세요.
 {"items":[{"name":"음식명","amount":100,"unit":"g","kcal":0,"protein":0,"carbs":0,"fat":0,"confidence":0}]}
-보이는 음식만 포함하고, 영양값은 합리적인 추정치로 작성하세요. locale: ${locale}`;
+사진에 실제로 보이는 음식과 음료를 각각 구분해서 포함하세요. 접시, 용기, 손, 식기 등은 제외하세요. 음식명이 불확실하면 넓은 범주의 한국어 이름을 사용하세요. amount는 사진에서 추정한 실제 섭취량, 영양값은 해당 amount 기준의 합리적인 추정치로 작성하세요. 최소 한 가지 음식이 보이면 items를 비우지 마세요. locale: ${locale}`;
 
     const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

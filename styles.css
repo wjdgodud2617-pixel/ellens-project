@@ -115,3 +115,7 @@ input,select,textarea,button{max-width:100%}
 /* v5.3 iPhone camera controls */
 .camera-choice-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 14px}.camera-choice-row button{min-height:48px}.food-scan-drop{cursor:default}.food-scan-drop img{max-height:360px;object-fit:contain}@supports(padding:max(0px)){body{padding-left:max(0px,env(safe-area-inset-left));padding-right:max(0px,env(safe-area-inset-right))}.topbar{padding-top:max(16px,env(safe-area-inset-top))}.bottom-nav{padding-bottom:max(10px,env(safe-area-inset-bottom))}}
 @media(max-width:520px){.camera-choice-row{grid-template-columns:1fr}}
+
+
+/* v5.4 workout replacement */
+.accent-text{color:var(--accent)!important}.workout-plan-options{display:grid;gap:10px;margin:18px 0}.workout-option{display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--panel2);cursor:pointer}.workout-option.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}.workout-option input{margin-top:4px;accent-color:var(--accent)}.workout-option span{display:grid;gap:5px}.workout-option b{font-size:.95rem}.workout-option small,.current-plan-note{color:var(--muted);line-height:1.4}.workout-change-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.workout-change-actions button{margin:0}@media(max-width:520px){.workout-change-actions{grid-template-columns:1fr}}

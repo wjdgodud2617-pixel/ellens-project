@@ -47,7 +47,7 @@
           <div><p class="eyebrow" id="workoutDayLabel">TODAY</p><h2 id="workoutDateLabel"></h2><p id="routineName" class="muted"></p></div>
           <button id="nextDayBtn" class="icon-btn" aria-label="Next day">›</button>
         </div>
-        <div class="section-head"><h2 id="workoutHeading">Today's workout</h2><div><button id="resetPlanBtn" class="text-btn">Reset plan</button><button id="addExerciseBtn" class="text-btn">+ Add</button></div></div>
+        <div class="section-head"><h2 id="workoutHeading">Today's workout</h2><div><button id="changeWorkoutBtn" class="text-btn accent-text">운동 변경</button><button id="resetPlanBtn" class="text-btn">Reset plan</button><button id="addExerciseBtn" class="text-btn">+ Add</button></div></div>
         <div id="workoutList" class="stack"></div>
         <button id="todayWorkoutBtn" class="secondary-btn compact-btn" hidden>Return to today</button>
 
@@ -190,6 +190,18 @@
       <button data-view="settings"><span>⚙</span>Settings</button>
     </nav>
   </div>
+
+  <dialog id="changeWorkoutDialog" class="modal workout-change-modal">
+    <form method="dialog"><button class="close-btn" aria-label="Close">×</button></form>
+    <p class="eyebrow">CHANGE TODAY'S WORKOUT</p>
+    <h2>HYROX로 전체 변경</h2>
+    <p class="muted">기존 운동은 보관되며 언제든 원래 계획으로 복원할 수 있어요.</p>
+    <div id="workoutPlanOptions" class="workout-plan-options"></div>
+    <div class="workout-change-actions">
+      <button id="restoreWorkoutPlanBtn" type="button" class="secondary-btn" hidden>원래 계획으로 복원</button>
+      <button id="applyWorkoutChangeBtn" type="button" class="primary-btn">HYROX로 전체 교체</button>
+    </div>
+  </dialog>
 
   <dialog id="exerciseDialog" class="modal">
     <form method="dialog">
