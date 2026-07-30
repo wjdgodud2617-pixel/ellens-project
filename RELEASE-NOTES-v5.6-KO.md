@@ -1,10 +1,10 @@
-# ELDYN v5.3 — iPhone Camera Ready
+# ELDYN v5.6 — Official Brand & PWA Run Recovery
 
-- 음식 사진: 카메라 촬영과 사진 보관함 버튼을 분리했습니다.
-- 영양정보표: 카메라 촬영과 사진 보관함 버튼을 분리했습니다.
-- 촬영/선택 이미지 미리보기, 압축, AI 분석, 식단 저장 흐름을 연결했습니다.
-- iPhone 홈 화면 설치용 Apple 메타 태그와 safe-area 대응을 추가했습니다.
-- v5.2 GPS 지도·Certified Run 공유카드를 유지합니다.
+- ELDYN 공식 심볼/워드마크 기반 앱 아이콘과 헤더 적용
+- Performance(네온), Core Black, Paris Edition 테마 추가
+- 러닝 경로·거리·주요 버튼에 선택 테마 적용
+- 러닝 세션 5초 간격 자동 저장 및 pagehide/잠금 전환 복구 강화
+- 앱 재실행 시 활성 러닝 세션 복구
+- 공유 카드의 임시 다이아몬드 심볼 제거
 
-## 중요
-이 버전은 iPhone Safari/PWA에서 카메라와 AI 식단 분석을 사용할 수 있습니다. 화면 잠금 중 장시간 GPS 추적과 Apple Watch 운동 센서 연동은 iOS 네이티브 앱(Xcode/Capacitor) 단계가 추가로 필요합니다.
+> PWA 특성상 iOS가 브라우저를 완전히 중단하면 백그라운드 GPS는 보장되지 않습니다. Live Activity와 완전한 백그라운드 위치 추적은 네이티브 iOS 버전에서 구현해야 합니다.

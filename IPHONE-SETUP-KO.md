@@ -1,39 +1,21 @@
-# ELDYN AI Food Scan 설정
+# iPhone에서 ELDYN 사용
 
-앱 화면과 저장 기능은 이미 포함되어 있습니다. 실제 AI 분석을 켜려면 Supabase Edge Function을 한 번 배포해야 합니다.
+1. Vercel HTTPS 주소를 iPhone Safari에서 엽니다.
+2. 공유 버튼 → 홈 화면에 추가를 선택합니다.
+3. ELDYN을 홈 화면에서 실행합니다.
+4. 식단에서 음식 사진 또는 영양표 분석을 누릅니다.
+5. 카메라로 촬영 또는 사진 보관함을 선택합니다.
+6. 첫 실행 시 카메라 권한을 허용합니다.
 
-## 1. OpenAI API 키를 Supabase Secret에 저장
+## 현재 지원
+- iPhone 카메라 촬영
+- 사진 보관함 선택
+- 음식 사진 AI 분석
+- 영양정보표 AI 분석
+- 식단 저장
+- GPS 러닝 및 지도 공유 카드(앱이 화면에 활성화된 동안)
 
-```bash
-supabase secrets set OPENAI_API_KEY=여기에_API키
-```
-
-선택적으로 모델을 바꿀 수 있습니다.
-
-```bash
-supabase secrets set OPENAI_VISION_MODEL=gpt-5-mini
-```
-
-API 키를 `config.js` 또는 브라우저 코드에 넣으면 안 됩니다.
-
-## 2. Edge Function 배포
-
-프로젝트 루트에서:
-
-```bash
-supabase login
-supabase link --project-ref qgpcnuvotlmxedrzrlnc
-supabase functions deploy analyze-food
-```
-
-기본 JWT 검증을 유지하세요. AI Food Scan은 로그인한 사용자만 호출합니다.
-
-## 3. 앱 재배포
-
-전체 파일을 GitHub 저장소에 덮어쓰고 Vercel에서 재배포합니다.
-
-## 사용 흐름
-
-오늘 식단 카드 → `📷 AI 사진` → 촬영/선택 → AI 분석 → 음식명·양·영양성분 수정 → 식단 저장
-
-분석 결과는 해당 날짜의 식단에 들어가며 기존 `daily_logs` RLS 정책에 따라 로그인 사용자별로 분리됩니다.
+## 네이티브 전환이 필요한 기능
+- 화면이 꺼진 상태의 안정적인 GPS 기록
+- 잠금 화면 Live Activity
+- Apple Watch 심박수/운동 세션 연동
