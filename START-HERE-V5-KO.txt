@@ -1,0 +1,13 @@
+ELDYN v5 배포 순서
+
+1. 이 폴더의 config.js를 열어 기존 Supabase URL과 공개 키가 유지되어 있는지 확인합니다.
+2. 이 폴더의 웹 파일 전체를 기존 GitHub 저장소 최상위에 덮어씁니다.
+3. GitHub에서 Commit changes를 누릅니다.
+4. Vercel Deployments에서 최신 배포가 Ready인지 확인합니다.
+5. 앱에 로그인한 뒤 Nutrition > 영양정보표 촬영을 테스트합니다.
+
+Supabase는 이미 아래 상태여야 합니다.
+- 함수 이름: analyze-food
+- Secret 이름: OPENAI_API_KEY
+
+문제가 생기면 Supabase Edge Functions > analyze-food > Logs에서 오류 내용을 확인합니다.

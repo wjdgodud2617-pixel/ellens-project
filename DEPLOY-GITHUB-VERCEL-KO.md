@@ -1,42 +1,110 @@
-# ELDYN 웹 배포 — 가장 쉬운 방법
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
-## 1. GitHub 저장소 만들기
-1. github.com 로그인
-2. 우측 상단 + → New repository
-3. Repository name: `ellens-project`
-4. Private 선택 권장
-5. Create repository
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" },
+  });
+}
 
-## 2. 파일 올리기
-1. 생성된 저장소에서 `uploading an existing file` 또는 Add file → Upload files
-2. 이 폴더 안의 파일과 `icons` 폴더를 모두 끌어다 놓기
-3. Commit changes 클릭
+function extractJson(text: string) {
+  const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
+  try { return JSON.parse(cleaned); } catch (_) {}
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start >= 0 && end > start) return JSON.parse(cleaned.slice(start, end + 1));
+  throw new Error("AI 응답을 JSON으로 해석하지 못했습니다.");
+}
 
-중요: `ELLENS-PROJECT-VERCEL-READY` 폴더 자체가 아니라, 그 안의 `index.html`, `app.js`, `styles.css` 등이 저장소 최상위에 보여야 합니다.
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") return jsonResponse({ error: "POST 요청만 지원합니다." }, 405);
 
-## 3. Vercel에 연결하기
-1. vercel.com 로그인
-2. Add New → Project
-3. GitHub 연결 허용
-4. `ellens-project` 저장소 옆 Import
-5. Framework Preset: Other
-6. Root Directory: `./`
-7. Build Command: 비워두기
-8. Output Directory: 비워두기
-9. Deploy 클릭
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return jsonResponse({ error: "로그인이 필요합니다." }, 401);
 
-완료되면 `https://프로젝트이름.vercel.app` 주소가 생성됩니다.
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) return jsonResponse({ error: "OPENAI_API_KEY가 Supabase Secrets에 설정되지 않았습니다." }, 500);
 
-## 4. Supabase 인증 주소 추가
-Supabase → Authentication → URL Configuration에서:
-- Site URL: Vercel에서 받은 주소
-- Redirect URLs: `https://프로젝트이름.vercel.app/**`
+    const { imageDataUrl, locale = "ko-KR", mode = "label" } = await req.json();
+    if (typeof imageDataUrl !== "string" || !imageDataUrl.startsWith("data:image/")) {
+      return jsonResponse({ error: "올바른 이미지가 전달되지 않았습니다." }, 400);
+    }
+    if (imageDataUrl.length > 20_000_000) return jsonResponse({ error: "이미지 용량이 너무 큽니다." }, 413);
 
-저장 후 해당 웹주소에서 로그인합니다.
+    const model = Deno.env.get("OPENAI_VISION_MODEL") || "gpt-4.1-mini";
+    const isLabel = mode === "label";
+    const instruction = isLabel
+      ? `한국 식품 포장지의 영양정보표 이미지를 분석하세요. 보이는 정보만 사용하고 추측은 최소화하세요.
+반드시 아래 JSON 객체 하나만 반환하세요.
+{
+  "label": {
+    "productName": "제품명 또는 미확인",
+    "totalAmount": 0,
+    "basisAmount": 0,
+    "basisUnit": "g",
+    "kcal": 0,
+    "carbs": 0,
+    "protein": 0,
+    "fat": 0,
+    "sugars": 0,
+    "sodium": 0,
+    "confidence": 0
+  },
+  "note": "사용자가 이해하기 쉬운 한국어 한 줄 설명"
+}
+규칙:
+- totalAmount는 제품 전체 총 내용량입니다.
+- basisAmount는 영양성분 수치가 적용되는 기준량(1회 제공량, 100g당 등)입니다.
+- basisUnit은 g, ml, 개 중 하나를 우선 사용하세요.
+- kcal는 기준량당 열량, carbs/protein/fat/sugars는 g, sodium은 mg입니다.
+- 표에 없는 값은 0으로 두세요.
+- confidence는 0~100 정수입니다.
+- 총 내용량당/100g당/1회 제공량당 열이 여러 개면 사용자가 실제 섭취량을 환산하기 가장 명확한 열 하나를 선택하세요.
+- locale: ${locale}`
+      : `음식 사진을 분석해 아래 JSON 객체 하나만 반환하세요.
+{"items":[{"name":"음식명","amount":100,"unit":"g","kcal":0,"protein":0,"carbs":0,"fat":0,"confidence":0}]}
+보이는 음식만 포함하고, 영양값은 합리적인 추정치로 작성하세요. locale: ${locale}`;
 
-## 5. 휴대폰 설치
-- iPhone Safari: 공유 → 홈 화면에 추가
-- Android Chrome: 메뉴 → 앱 설치 또는 홈 화면에 추가
+    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.1,
+        max_tokens: 1200,
+        response_format: { type: "json_object" },
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: instruction },
+            { type: "image_url", image_url: { url: imageDataUrl, detail: "high" } },
+          ],
+        }],
+      }),
+    });
 
-## 보안
-`config.js`에는 브라우저용 Publishable Key만 들어 있습니다. Service Role Key는 절대 넣지 마세요.
+    const raw = await openaiRes.text();
+    if (!openaiRes.ok) {
+      console.error("OpenAI error", openaiRes.status, raw);
+      return jsonResponse({ error: `AI 분석 요청에 실패했습니다. (${openaiRes.status})` }, 502);
+    }
+
+    const payload = JSON.parse(raw);
+    const text = payload?.choices?.[0]?.message?.content;
+    if (!text) return jsonResponse({ error: "AI 분석 결과가 비어 있습니다." }, 502);
+    const result = extractJson(text);
+    return jsonResponse(result);
+  } catch (error) {
+    console.error(error);
+    return jsonResponse({ error: error instanceof Error ? error.message : "분석 중 오류가 발생했습니다." }, 500);
+  }
+});

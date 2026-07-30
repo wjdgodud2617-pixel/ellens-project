@@ -1,54 +1,33 @@
-# ELDYN v3.0 MOBILE
+# ELDYN v5 — Nutrition Edition
 
-Mobile-first fitness OS with Supabase sync.
+**Move Forward.**  
+**Every Limit Defines Your Next.**
 
-## v3.0 changes
-- Mobile UI centred and width-safe on iPhone and Galaxy
-- Safe-area support for notches and home indicators
-- Responsive meal, workout, settings and calendar cards
-- Larger touch targets and mobile-friendly dialogs
-- Existing food search, calorie totals, nutrition targets and cloud sync retained
+ELDYN v5 is the new baseline release. It retains the existing GPS running, profile, progress, meal logging and Supabase sync features, and standardizes the Nutrition workflow around the deployed `analyze-food` Edge Function.
 
-# ELDYN
+## Nutrition features
 
-**Smile. Train. Become the Machine.**
+- Expanded Korean/English food search
+- Recent foods and favourites
+- Manual nutrition entry
+- Food photo AI analysis
+- Packaged-food nutrition label scan
+- Editable analysis result before saving
+- Portion-based automatic recalculation
+- Save to breakfast, lunch, dinner or snack
+- AI one-line nutrition note
+- Daily calories and macro totals
 
-A mobile-first, local-first workout, nutrition, water, sleep and progress tracker.
+## Deployment
 
-## Run locally
+1. Keep your existing `config.js` Supabase project URL and publishable/anon key.
+2. Upload the web files in this folder to the existing GitHub repository and commit.
+3. Vercel will redeploy automatically when connected to that repository.
+4. Supabase Edge Function name must be exactly `analyze-food`.
+5. Supabase Edge Function Secret must contain `OPENAI_API_KEY`.
 
-Use a small local server (PWA features do not work reliably from `file://`):
+The canonical Edge Function source is located at:
 
-```bash
-python -m http.server 8080
-```
+`supabase/functions/analyze-food/index.ts`
 
-Then open `http://localhost:8080`.
-
-## Enable Supabase sync
-
-1. Create a Supabase project.
-2. Run `supabase.sql` in the SQL editor.
-3. In Authentication settings, configure email sign-in as desired.
-4. Copy the project URL and public/publishable key into `config.js`.
-5. Deploy the folder to an HTTPS host such as Netlify, Vercel, GitHub Pages, or Cloudflare Pages.
-
-Never put a service-role key in `config.js`.
-
-## YouTube exercise guides
-
-Each custom exercise accepts a YouTube URL or video ID. The app embeds it with the privacy-enhanced `youtube-nocookie.com` player. Default exercises open a YouTube search so you can choose the guide you trust.
-
-## Included
-
-- Responsive dashboard and bottom navigation
-- Daily score and 0/25/50/75/100% mood system
-- 100% completion modal with confetti and slogan
-- Workout set/rep/weight tracking
-- Exercise guide modal and YouTube links
-- Nutrition, water, sleep and memo logs
-- Calendar heatmap and daily summaries
-- Body measurements and weekly score chart
-- JSON export/import
-- PWA manifest and service worker
-- Optional Supabase email login and device sync
+Never put the OpenAI API key or Supabase secret/service-role key in GitHub or `config.js`.
