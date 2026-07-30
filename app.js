@@ -239,39 +239,64 @@ function finishRun(){
   } else {runSession=null;saveActiveRun();renderRun()}
 }
 function coverImage(ctx,img,w,h){const scale=Math.max(w/img.width,h/img.height),sw=w/scale,sh=h/scale,sx=(img.width-sw)/2,sy=(img.height-sh)/2;ctx.drawImage(img,sx,sy,sw,sh,0,0,w,h)}
-function drawRoute(ctx,route,x,y,w,h){
-  if(!route||route.length<2)return false;
-  const lats=route.map(p=>p.lat),lons=route.map(p=>p.lon),minLat=Math.min(...lats),maxLat=Math.max(...lats),minLon=Math.min(...lons),maxLon=Math.max(...lons);
-  const pad=18,dx=Math.max(maxLon-minLon,.00001),dy=Math.max(maxLat-minLat,.00001);
-  ctx.beginPath();route.forEach((p,i)=>{const px=x+pad+(p.lon-minLon)/dx*(w-pad*2),py=y+h-pad-(p.lat-minLat)/dy*(h-pad*2);i?ctx.lineTo(px,py):ctx.moveTo(px,py)});
-  ctx.lineWidth=Math.max(6,w*.018);ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#b9ff3f';ctx.shadowColor='rgba(0,0,0,.45)';ctx.shadowBlur=10;ctx.stroke();ctx.shadowBlur=0;
-  return true
+function mercatorWorld(lat,lon,zoom){
+  const scale=256*Math.pow(2,zoom),clamped=Math.max(-85.0511,Math.min(85.0511,lat)),sin=Math.sin(clamped*Math.PI/180);
+  return{x:(lon+180)/360*scale,y:(.5-Math.log((1+sin)/(1-sin))/(4*Math.PI))*scale}
 }
-function renderShareCard(){
-  if(!shareRunRecord)return;
+function routeViewport(route,w,h){
+  const clean=(route||[]).filter(p=>Number.isFinite(+p.lat)&&Number.isFinite(+(p.lon??p.lng))).map(p=>({lat:+p.lat,lon:+(p.lon??p.lng)}));
+  if(clean.length<2)return null;
+  let minLat=Math.min(...clean.map(p=>p.lat)),maxLat=Math.max(...clean.map(p=>p.lat)),minLon=Math.min(...clean.map(p=>p.lon)),maxLon=Math.max(...clean.map(p=>p.lon));
+  const latPad=Math.max((maxLat-minLat)*.22,.00035),lonPad=Math.max((maxLon-minLon)*.22,.00035);minLat-=latPad;maxLat+=latPad;minLon-=lonPad;maxLon+=lonPad;
+  let zoom=17;for(;zoom>=3;zoom--){const a=mercatorWorld(maxLat,minLon,zoom),b=mercatorWorld(minLat,maxLon,zoom);if((b.x-a.x)<=w&&(b.y-a.y)<=h)break}
+  const center=mercatorWorld((minLat+maxLat)/2,(minLon+maxLon)/2,zoom);return{clean,zoom,center,originX:center.x-w/2,originY:center.y-h/2}
+}
+function loadMapTile(z,x,y){return new Promise(resolve=>{const img=new Image();img.crossOrigin='anonymous';img.onload=()=>resolve(img);img.onerror=()=>resolve(null);img.src=`https://tile.openstreetmap.org/${z}/${x}/${y}.png`})}
+function drawMapFallback(ctx,x,y,w,h){
+  ctx.fillStyle='#18201b';ctx.fillRect(x,y,w,h);ctx.strokeStyle='rgba(255,255,255,.10)';ctx.lineWidth=3;
+  for(let i=-2;i<9;i++){ctx.beginPath();ctx.moveTo(x+i*w/7,y);ctx.lineTo(x+(i+3)*w/7,y+h);ctx.stroke()}
+  for(let i=1;i<7;i++){ctx.beginPath();ctx.moveTo(x,y+i*h/7);ctx.bezierCurveTo(x+w*.3,y+(i-.8)*h/7,x+w*.68,y+(i+.7)*h/7,x+w,y+i*h/7);ctx.stroke()}
+}
+async function drawRouteMap(ctx,route,x,y,w,h,radius=28){
+  const view=routeViewport(route,w-36,h-36);ctx.save();ctx.beginPath();ctx.roundRect(x,y,w,h,radius);ctx.clip();drawMapFallback(ctx,x,y,w,h);
+  if(!view){ctx.restore();return false}
+  const z=view.zoom,tile=256,minTX=Math.floor(view.originX/tile),maxTX=Math.floor((view.originX+w)/tile),minTY=Math.floor(view.originY/tile),maxTY=Math.floor((view.originY+h)/tile),jobs=[];
+  for(let ty=minTY;ty<=maxTY;ty++)for(let tx=minTX;tx<=maxTX;tx++)jobs.push({tx,ty,p:loadMapTile(z,tx,ty)});
+  const tiles=await Promise.all(jobs.map(j=>j.p));tiles.forEach((img,i)=>{if(!img)return;const j=jobs[i];ctx.drawImage(img,x+j.tx*tile-view.originX,y+j.ty*tile-view.originY,tile,tile)});
+  ctx.fillStyle='rgba(4,8,6,.20)';ctx.fillRect(x,y,w,h);
+  const points=view.clean.map(p=>{const q=mercatorWorld(p.lat,p.lon,z);return{x:x+q.x-view.originX,y:y+q.y-view.originY}});
+  ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.lineWidth=Math.max(8,w*.012);ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#b9ff3f';ctx.shadowColor='rgba(185,255,63,.48)';ctx.shadowBlur=14;ctx.stroke();ctx.shadowBlur=0;
+  const marker=(p,label,fill)=>{ctx.beginPath();ctx.arc(p.x,p.y,15,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();ctx.lineWidth=5;ctx.strokeStyle='#fff';ctx.stroke();ctx.fillStyle='#071007';ctx.font='900 16px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,p.x,p.y+1)};
+  marker(points[0],'S','#b9ff3f');marker(points[points.length-1],'F','#ffffff');ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.restore();return true
+}
+let shareRenderToken=0;
+async function renderShareCard(){
+  if(!shareRunRecord)return;const token=++shareRenderToken;
   const ratio=shareEls.ratio.value,sizes={story:[1080,1920],feed:[1080,1350],square:[1080,1080]},[w,h]=sizes[ratio];
   const c=shareEls.canvas,ctx=c.getContext('2d');c.width=w;c.height=h;
-  if(sharePhotoImage)coverImage(ctx,sharePhotoImage,w,h);else{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#111711');g.addColorStop(1,'#050706');ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}
-  const grad=ctx.createLinearGradient(0,h*.28,0,h);grad.addColorStop(0,'rgba(0,0,0,.05)');grad.addColorStop(1,'rgba(0,0,0,.82)');ctx.fillStyle=grad;ctx.fillRect(0,0,w,h);
-  const r=shareRunRecord,pad=w*.075;
-  ctx.fillStyle='#b9ff3f';ctx.font=`800 ${Math.round(w*.036)}px system-ui`;ctx.fillText('◆ ELDYN RUN CERTIFIED',pad,pad*1.15);
-  ctx.fillStyle='#ffffff';ctx.font=`800 ${Math.round(w*.118)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,pad,h*.64);
-  ctx.font=`700 ${Math.round(w*.044)}px system-ui`;ctx.fillText(`${formatClock(r.durationMs)}   ·   AVG ${paceText(r.avgPaceSecKm)}/KM`,pad,h*.70);
-  const mapW=w*.34,mapH=w*.27,mapX=w-pad-mapW,mapY=pad*1.8;
-  ctx.fillStyle='rgba(0,0,0,.38)';ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(mapX,mapY,mapW,mapH,28);ctx.fill();ctx.stroke();
-  const hasRoute=drawRoute(ctx,r.route,mapX+12,mapY+12,mapW-24,mapH-24);
-  if(!hasRoute){ctx.fillStyle='rgba(255,255,255,.75)';ctx.font=`600 ${Math.round(w*.026)}px system-ui`;ctx.textAlign='center';ctx.fillText(r.gpsEnabled===false?'PRIVATE RUN · GPS OFF':'NO ROUTE DATA',mapX+mapW/2,mapY+mapH/2);ctx.textAlign='left'}
-  const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim();
-  ctx.font=`500 ${Math.round(w*.034)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.94)';ctx.fillText(caption.slice(0,64),pad,h*.79);
-  ctx.font=`600 ${Math.round(w*.025)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.72)';
-  ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL  ·  ELDYN`,pad,h-pad*.75)
+  if(sharePhotoImage)coverImage(ctx,sharePhotoImage,w,h);else{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#121a14');g.addColorStop(1,'#050706');ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}
+  const shade=ctx.createLinearGradient(0,0,0,h);shade.addColorStop(0,'rgba(0,0,0,.20)');shade.addColorStop(.48,'rgba(0,0,0,.12)');shade.addColorStop(1,'rgba(0,0,0,.86)');ctx.fillStyle=shade;ctx.fillRect(0,0,w,h);
+  const r=shareRunRecord,pad=w*.075,logoY=pad*.82;
+  ctx.textAlign='center';ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.046)}px system-ui`;ctx.fillText('◇',w/2,logoY);
+  ctx.font=`900 ${Math.round(w*.054)}px system-ui`;ctx.fillText('ELDYN',w/2,logoY+w*.052);
+  ctx.fillStyle='rgba(255,255,255,.92)';ctx.font=`600 ${Math.round(w*.024)}px system-ui`;ctx.fillText('Certified Run',w/2,logoY+w*.086);ctx.textAlign='left';
+  const mapX=pad,mapY=h*.18,mapW=w-pad*2,mapH=Math.min(h*.34,w*.54);
+  ctx.fillStyle='rgba(0,0,0,.44)';ctx.strokeStyle='rgba(255,255,255,.28)';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(mapX,mapY,mapW,mapH,34);ctx.fill();ctx.stroke();
+  const hasRoute=await drawRouteMap(ctx,r.route,mapX+3,mapY+3,mapW-6,mapH-6,31);if(token!==shareRenderToken)return;
+  if(!hasRoute){ctx.fillStyle='rgba(255,255,255,.78)';ctx.font=`700 ${Math.round(w*.028)}px system-ui`;ctx.textAlign='center';ctx.fillText(r.gpsEnabled===false?'PRIVATE RUN · GPS OFF':'NO ROUTE DATA',w/2,mapY+mapH/2);ctx.textAlign='left'}
+  const metricsY=mapY+mapH+h*.065;ctx.fillStyle='#ffffff';ctx.font=`900 ${Math.round(w*.126)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,pad,metricsY);
+  ctx.font=`750 ${Math.round(w*.041)}px system-ui`;ctx.fillText(`${formatClock(r.durationMs)}   ·   AVG ${paceText(r.avgPaceSecKm)}/KM`,pad,metricsY+h*.052);
+  const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim();ctx.font=`550 ${Math.round(w*.033)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.95)';ctx.fillText(caption.slice(0,64),pad,metricsY+h*.115);
+  ctx.font=`650 ${Math.round(w*.024)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.74)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);
+  ctx.textAlign='right';ctx.fillStyle='#b9ff3f';ctx.fillText('Verified by ELDYN',w-pad,h-pad*.92);ctx.textAlign='left';
+  ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)
 }
 function openShareCard(id){
   shareRunRecord=(state.runs||[]).find(r=>r.id===id);if(!shareRunRecord)return;
   shareEls.caption.value='Today, I showed up. (ง •̀_•́)ง';sharePhotoImage=null;shareEls.photo.value='';renderShareCard();shareEls.dialog.showModal()
 }
 shareEls.photo.addEventListener('change',()=>{const file=shareEls.photo.files?.[0];if(!file)return;const img=new Image();img.onload=()=>{sharePhotoImage=img;renderShareCard();URL.revokeObjectURL(img.src)};img.src=URL.createObjectURL(file)});
-shareEls.ratio.addEventListener('change',renderShareCard);shareEls.caption.addEventListener('input',renderShareCard);shareEls.render.addEventListener('click',renderShareCard);
+shareEls.ratio.addEventListener('change',()=>renderShareCard());shareEls.caption.addEventListener('input',()=>renderShareCard());shareEls.render.addEventListener('click',()=>renderShareCard());
 function canvasBlob(){return new Promise(resolve=>shareEls.canvas.toBlob(resolve,'image/png',.95))}
 shareEls.download.addEventListener('click',async()=>{const blob=await canvasBlob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 shareEls.nativeShare.addEventListener('click',async()=>{const blob=await canvasBlob(),file=new File([blob],`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`,{type:'image/png'});if(navigator.canShare?.({files:[file]})){await navigator.share({title:'ELDYN Run',text:'ELDYN Run Certified',files:[file]})}else{alert('Direct sharing is not supported here. Use Save image, then share it from your gallery.')}});
