@@ -9,6 +9,7 @@
   <meta name="description" content="ELDYN — training, nutrition and running in one place." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <link rel="stylesheet" href="styles.css" />
   <title>ELDYN — Personal Performance App</title>
 </head>
@@ -91,7 +92,7 @@
 
         <div class="route-panel">
           <div class="route-panel-head"><span>LIVE ROUTE</span><strong id="gpsQuality">WAITING</strong></div>
-          <canvas id="liveRouteCanvas" width="900" height="360" aria-label="Live running route"></canvas>
+          <div id="liveRunMap" class="live-run-map" aria-label="Live running map"></div>
         </div>
 
         <div class="run-metrics">
@@ -229,7 +230,6 @@
 
   <dialog id="shareRunDialog" class="modal share-run-modal">
     <form method="dialog">
-      <button class="close-btn" value="cancel" aria-label="Close">×</button>
       <p class="eyebrow">ELDYN · CERTIFIED RUN</p>
       <h2>Create Run Share Card</h2>
       <p class="muted">사진 위 실제 GPS 경로와 Start / Finish 마커를 올려 인증 카드를 만듭니다.</p>
@@ -252,6 +252,9 @@
           </select>
         </label>
         <label class="memo-card"><span>Caption</span><textarea id="shareCaptionInput" rows="2" maxlength="90" placeholder="Today, I showed up. (ง •̀_•́)ง"></textarea></label>
+        <label class="field-card"><span>Text size</span><input id="shareTextSize" type="range" min="75" max="115" value="88" /></label>
+        <label class="field-card"><span>Route size</span><input id="shareRouteSize" type="range" min="60" max="125" value="80" /></label>
+        <label class="field-card"><span>Logo size</span><input id="shareLogoSize" type="range" min="75" max="115" value="88" /></label>
       </div>
 
       <canvas id="shareCanvas" width="1080" height="1350" aria-label="Run share card preview"></canvas>
@@ -260,6 +263,7 @@
         <button id="downloadShareBtn" type="button" class="primary-btn">Save image</button>
         <button id="nativeShareBtn" type="button" class="primary-btn">Share</button>
       </div>
+      <button type="submit" value="cancel" class="share-close-bottom">Close</button>
     </form>
   </dialog>
 
@@ -343,6 +347,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>if(!window.supabase){document.write('<script src="https://unpkg.com/@supabase/supabase-js@2"><\/script>')}</script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>

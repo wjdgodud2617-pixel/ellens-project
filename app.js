@@ -210,19 +210,45 @@ const runEls={
   splits:document.getElementById('runSplits'),history:document.getElementById('runHistory'),start:document.getElementById('startRunBtn'),
   pause:document.getElementById('pauseRunBtn'),finish:document.getElementById('finishRunBtn'),gpsToggle:document.getElementById('gpsEnabledToggle'),
   autoPause:document.getElementById('autoPauseToggle'),movingTime:document.getElementById('runMovingTime'),topSpeed:document.getElementById('runTopSpeed'),
-  quality:document.getElementById('gpsQuality'),routeCanvas:document.getElementById('liveRouteCanvas')
+  quality:document.getElementById('gpsQuality'),map:document.getElementById('liveRunMap')
 };
 const shareEls={
   dialog:document.getElementById('shareRunDialog'),photo:document.getElementById('sharePhotoInput'),ratio:document.getElementById('shareRatioSelect'),style:document.getElementById('shareStyleSelect'),
   caption:document.getElementById('shareCaptionInput'),canvas:document.getElementById('shareCanvas'),render:document.getElementById('renderShareBtn'),
-  download:document.getElementById('downloadShareBtn'),nativeShare:document.getElementById('nativeShareBtn')
+  download:document.getElementById('downloadShareBtn'),nativeShare:document.getElementById('nativeShareBtn'),textSize:document.getElementById('shareTextSize'),routeSize:document.getElementById('shareRouteSize'),logoSize:document.getElementById('shareLogoSize')
 };
 let shareRunRecord=null,sharePhotoImage=null;
 const ACTIVE_RUN_KEY='eldyn-active-run-v4';
 function saveActiveRun(){if(!runSession){localStorage.removeItem(ACTIVE_RUN_KEY);return}const snap={...runSession,savedAt:Date.now()};localStorage.setItem(ACTIVE_RUN_KEY,JSON.stringify(snap))}
 function restoreActiveRun(){try{const r=JSON.parse(localStorage.getItem(ACTIVE_RUN_KEY)||'null');if(!r||Date.now()-(r.savedAt||0)>12*3600e3)return localStorage.removeItem(ACTIVE_RUN_KEY);runSession=r;if(r.status==='running'){runSession.elapsedBefore=(r.elapsedBefore||0)+Math.max(0,Date.now()-(r.segmentStartedAt||Date.now()));runSession.segmentStartedAt=Date.now();runSession.lastPoint=null;runSession.status='paused';runSession.autoPaused=false}runEls.gpsToggle.checked=!!runSession.gpsEnabled;runEls.autoPause.checked=runSession.autoPauseEnabled!==false;runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000)}catch{localStorage.removeItem(ACTIVE_RUN_KEY)}}
 function gpsQualityLabel(acc){if(!Number.isFinite(acc))return 'WAITING';if(acc<=10)return 'EXCELLENT';if(acc<=25)return 'GOOD';if(acc<=50)return 'FAIR';return 'LOW'}
-function drawLiveRoute(){const c=runEls.routeCanvas;if(!c)return;const ctx=c.getContext('2d'),w=c.width,h=c.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#0b0d0c';ctx.fillRect(0,0,w,h);ctx.strokeStyle='rgba(255,255,255,.055)';ctx.lineWidth=1;for(let x=0;x<w;x+=90){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}for(let y=0;y<h;y+=72){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}const pts=runSession?.route||[];if(pts.length<2){ctx.fillStyle='rgba(255,255,255,.5)';ctx.font='700 28px system-ui';ctx.textAlign='center';ctx.fillText(runSession?.gpsEnabled===false?'PRIVATE RUN · GPS OFF':'ROUTE APPEARS AFTER GPS LOCK',w/2,h/2);return}const lats=pts.map(p=>p.lat),lons=pts.map(p=>p.lon),minLat=Math.min(...lats),maxLat=Math.max(...lats),minLon=Math.min(...lons),maxLon=Math.max(...lons),pad=38,dx=Math.max(maxLon-minLon,.00001),dy=Math.max(maxLat-minLat,.00001);const xy=p=>[pad+(p.lon-minLon)/dx*(w-pad*2),h-pad-(p.lat-minLat)/dy*(h-pad*2)];ctx.strokeStyle='#b9ff3f';ctx.lineWidth=8;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();pts.forEach((p,i)=>{const [x,y]=xy(p);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();const [sx,sy]=xy(pts[0]),[ex,ey]=xy(pts.at(-1));ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(sx,sy,10,0,Math.PI*2);ctx.fill();ctx.fillStyle='#b9ff3f';ctx.beginPath();ctx.arc(ex,ey,12,0,Math.PI*2);ctx.fill()}
+let liveRunMap=null,liveRunPath=null,liveRunMarker=null,liveRunStartMarker=null,liveMapHasFit=false;
+function ensureLiveRunMap(){
+  if(liveRunMap||!runEls.map||!window.L)return;
+  liveRunMap=L.map(runEls.map,{zoomControl:true,attributionControl:true}).setView([37.5665,126.9780],13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(liveRunMap);
+  liveRunPath=L.polyline([],{color:'#b9ff3f',weight:6,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(liveRunMap);
+  setTimeout(()=>liveRunMap.invalidateSize(),120);
+}
+function updateLiveRunMap(){
+  ensureLiveRunMap();if(!liveRunMap)return;
+  const pts=(runSession?.route||[]).filter(p=>Number.isFinite(+p.lat)&&Number.isFinite(+p.lon)).map(p=>[+p.lat,+p.lon]);
+  liveRunPath.setLatLngs(pts);
+  if(pts.length){
+    if(!liveRunStartMarker)liveRunStartMarker=L.circleMarker(pts[0],{radius:7,color:'#fff',weight:3,fillColor:'#b9ff3f',fillOpacity:1}).addTo(liveRunMap).bindTooltip('S',{permanent:true,direction:'center',className:'run-marker-label'});
+    else liveRunStartMarker.setLatLng(pts[0]);
+    const last=pts[pts.length-1];
+    if(!liveRunMarker)liveRunMarker=L.circleMarker(last,{radius:9,color:'#fff',weight:3,fillColor:'#b9ff3f',fillOpacity:1}).addTo(liveRunMap).bindTooltip('●',{permanent:true,direction:'center',className:'run-marker-label current'});
+    else liveRunMarker.setLatLng(last);
+    if(!liveMapHasFit&&pts.length>1){liveRunMap.fitBounds(L.latLngBounds(pts),{padding:[36,36],maxZoom:17});liveMapHasFit=true}
+    else if(runSession?.status==='running')liveRunMap.panTo(last,{animate:true,duration:.35});
+  }else{
+    liveMapHasFit=false;
+    if(liveRunMarker){liveRunMap.removeLayer(liveRunMarker);liveRunMarker=null}
+    if(liveRunStartMarker){liveRunMap.removeLayer(liveRunStartMarker);liveRunStartMarker=null}
+  }
+}
+function drawLiveRoute(){updateLiveRunMap()}
 
 function haversine(a,b){const R=6371000,toRad=x=>x*Math.PI/180,dLat=toRad(b.lat-a.lat),dLon=toRad(b.lon-a.lon),la1=toRad(a.lat),la2=toRad(b.lat);const q=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(q))}
 function elapsedMs(){if(!runSession)return 0;return runSession.elapsedBefore+(runSession.status==='running'?Date.now()-runSession.segmentStartedAt:0)}
@@ -370,7 +396,7 @@ function drawRouteOverlay(ctx,route,x,y,w,h,transparent=false){
 let shareRenderToken=0;
 async function renderShareCard(){
   if(!shareRunRecord)return;const token=++shareRenderToken;
-  const ratio=shareEls.ratio.value,style=shareEls.style?.value||'photo',sizes={story:[1080,1920],feed:[1080,1350],square:[1080,1080]},[w,h]=sizes[ratio];
+  const ratio=shareEls.ratio.value,style=shareEls.style?.value||'photo',textScale=(+shareEls.textSize?.value||88)/100,routeScale=(+shareEls.routeSize?.value||80)/100,logoScale=(+shareEls.logoSize?.value||88)/100,sizes={story:[1080,1920],feed:[1080,1350],square:[1080,1080]},[w,h]=sizes[ratio];
   const c=shareEls.canvas,ctx=c.getContext('2d');c.width=w;c.height=h;const r=shareRunRecord,pad=w*.075;
   const base=()=>{if(sharePhotoImage)coverImage(ctx,sharePhotoImage,w,h);else{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#121a14');g.addColorStop(1,'#050706');ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}};
   base();
@@ -378,14 +404,13 @@ async function renderShareCard(){
   else if(style==='split'){
     ctx.fillStyle='#071007';ctx.fillRect(w*.54,0,w*.46,h);await drawRouteMap(ctx,r.route,w*.56,h*.15,w*.39,h*.47,30);if(sharePhotoImage){ctx.save();ctx.beginPath();ctx.rect(0,0,w*.54,h);ctx.clip();coverImage(ctx,sharePhotoImage,w*.54,h);ctx.restore()}else drawRouteOverlay(ctx,r.route,pad,h*.2,w*.40,h*.38);
   }else{
-    const routeX=pad,routeY=h*.17,routeW=w*.32,routeH=h*.25;drawRouteOverlay(ctx,r.route,routeX,routeY,routeW,routeH,true);
+    const metricsY=h*.72,routeW=w*.32*routeScale,routeH=h*.18*routeScale,routeX=pad,routeY=metricsY-routeH-h*.035;drawRouteOverlay(ctx,r.route,routeX,routeY,routeW,routeH,true);
   }
   if(token!==shareRenderToken)return;
   if(style!=='photo'){const shade=ctx.createLinearGradient(0,0,0,h);shade.addColorStop(0,'rgba(0,0,0,.18)');shade.addColorStop(.48,'rgba(0,0,0,.08)');shade.addColorStop(1,'rgba(0,0,0,.88)');ctx.fillStyle=shade;ctx.fillRect(0,0,w,h)}
-  const logoY=pad*.82;ctx.textAlign='center';ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.046)}px system-ui`;ctx.fillText('◇',w/2,logoY);ctx.font=`900 ${Math.round(w*.054)}px system-ui`;ctx.fillText('ELDYN',w/2,logoY+w*.052);ctx.fillStyle='rgba(255,255,255,.92)';ctx.font=`600 ${Math.round(w*.024)}px system-ui`;ctx.fillText('Certified Run',w/2,logoY+w*.086);
-  if(style==='photo'){ctx.textAlign='left';ctx.fillStyle='#b9ff3f';ctx.font=`850 ${Math.round(w*.026)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,pad,h*.455)}
-  ctx.textAlign='left';const metricsY=h*.72;ctx.fillStyle='#fff';ctx.shadowColor='rgba(0,0,0,.38)';ctx.shadowBlur=4;ctx.font=`900 ${Math.round(w*.100)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,pad,metricsY);ctx.font=`750 ${Math.round(w*.035)}px system-ui`;ctx.fillText(`${formatClock(r.durationMs)}   ·   AVG ${paceText(r.avgPaceSecKm)}/KM`,pad,metricsY+h*.050);
-  const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim();ctx.font=`550 ${Math.round(w*.028)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.96)';ctx.fillText(caption.slice(0,64),pad,metricsY+h*.106);ctx.font=`650 ${Math.round(w*.019)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.82)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);ctx.textAlign='right';ctx.fillStyle='#b9ff3f';ctx.fillText('Verified by ELDYN',w-pad,h-pad*.92);ctx.shadowBlur=0;ctx.textAlign='left';if(style!=='photo'){ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)}
+  const logoY=pad*.82;ctx.textAlign='center';ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.046*logoScale)}px system-ui`;ctx.fillText('◇',w/2,logoY);ctx.font=`900 ${Math.round(w*.054*logoScale)}px system-ui`;ctx.fillText('ELDYN',w/2,logoY+w*.052*logoScale);ctx.fillStyle='rgba(255,255,255,.92)';ctx.font=`600 ${Math.round(w*.024*logoScale)}px system-ui`;ctx.fillText('Certified Run',w/2,logoY+w*.086*logoScale);
+  ctx.textAlign='left';const metricsY=h*.72;ctx.fillStyle='#fff';ctx.shadowColor='rgba(0,0,0,.38)';ctx.shadowBlur=4;ctx.font=`900 ${Math.round(w*.100*textScale)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,pad,metricsY);ctx.font=`750 ${Math.round(w*.035*textScale)}px system-ui`;ctx.fillText(`${formatClock(r.durationMs)}   ·   AVG ${paceText(r.avgPaceSecKm)}/KM`,pad,metricsY+h*.050);
+  const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim();ctx.font=`550 ${Math.round(w*.028*textScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.96)';ctx.fillText(caption.slice(0,64),pad,metricsY+h*.106);ctx.font=`650 ${Math.round(w*.019*textScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.82)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);ctx.textAlign='right';ctx.fillStyle='#b9ff3f';ctx.fillText('Verified by ELDYN',w-pad,h-pad*.92);ctx.shadowBlur=0;ctx.textAlign='left';if(style!=='photo'){ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)}
 }
 
 function openShareCard(id){
@@ -393,7 +418,7 @@ function openShareCard(id){
   shareEls.caption.value='Today, I showed up. (ง •̀_•́)ง';sharePhotoImage=null;shareEls.photo.value='';renderShareCard();shareEls.dialog.showModal()
 }
 shareEls.photo.addEventListener('change',()=>{const file=shareEls.photo.files?.[0];if(!file)return;const img=new Image();img.onload=()=>{sharePhotoImage=img;renderShareCard();URL.revokeObjectURL(img.src)};img.src=URL.createObjectURL(file)});
-shareEls.ratio.addEventListener('change',()=>renderShareCard());shareEls.style?.addEventListener('change',()=>renderShareCard());shareEls.caption.addEventListener('input',()=>renderShareCard());shareEls.render.addEventListener('click',()=>renderShareCard());
+shareEls.ratio.addEventListener('change',()=>renderShareCard());shareEls.style?.addEventListener('change',()=>renderShareCard());shareEls.caption.addEventListener('input',()=>renderShareCard());[shareEls.textSize,shareEls.routeSize,shareEls.logoSize].forEach(el=>el?.addEventListener('input',()=>renderShareCard()));shareEls.render.addEventListener('click',()=>renderShareCard());
 function canvasBlob(){return new Promise(resolve=>shareEls.canvas.toBlob(resolve,'image/png',.95))}
 shareEls.download.addEventListener('click',async()=>{const blob=await canvasBlob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 shareEls.nativeShare.addEventListener('click',async()=>{const blob=await canvasBlob(),file=new File([blob],`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`,{type:'image/png'});if(navigator.canShare?.({files:[file]})){await navigator.share({title:'ELDYN Run',text:'ELDYN Run Certified',files:[file]})}else{alert('Direct sharing is not supported here. Use Save image, then share it from your gallery.')}});
@@ -496,3 +521,5 @@ nutritionLabelEls.result.oninput=e=>{const f=e.target.dataset.labelField;if(!f||
 nutritionLabelEls.save.onclick=()=>{
   if(!nutritionLabelData)return;const idx=+nutritionLabelEls.meal.value,log=getLog(activeDate),meals=ensureMeals(log,activeDate),meal=meals[idx];if(!meal)return alert('저장할 식사를 선택해 주세요.');const y=nutritionLabelScaled();meal.foodItems=meal.foodItems||[];meal.foodItems.push({name:nutritionLabelData.productName||'영양정보표 제품',amount:y.amount,unit:y.unit,kcal:y.kcal,protein:y.protein,carbs:y.carbs,fat:y.fat,sugars:y.sugars,sodium:y.sodium,source:'nutrition-label',confidence:nutritionLabelData.confidence||0,scannedAt:new Date().toISOString()});meal.customText=meal.foodItems.map(z=>z.name).join(' · ');meal.done=true;syncFoodTotals(log,meals);log.priorities.nutrition=meals.every(z=>z.done);log.updatedAt=new Date().toISOString();saveState();nutritionLabelEls.dialog.close();render();alert(`${meal.name} 식단에 영양정보를 저장했어요.`)
 };
+
+setTimeout(()=>{ensureLiveRunMap();liveRunMap?.invalidateSize()},250);document.querySelectorAll('[data-view="run"]').forEach(b=>b.addEventListener('click',()=>setTimeout(()=>{ensureLiveRunMap();liveRunMap?.invalidateSize();updateLiveRunMap()},120)));

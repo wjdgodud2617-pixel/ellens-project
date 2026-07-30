@@ -124,3 +124,16 @@ input,select,textarea,button{max-width:100%}
 
 /* v5.5.1 latest run dashboard analysis */
 .latest-run-analysis{padding:18px}.latest-run-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}.latest-run-head h3{margin:3px 0 0}.run-score-pill{background:var(--accent);color:#071007;border-radius:999px;padding:7px 10px;font-weight:900;font-size:.72rem;white-space:nowrap}.run-analysis-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.run-analysis-grid>div{background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:14px;padding:13px}.run-analysis-grid span{display:block;color:var(--muted);font-size:.68rem;font-weight:800;letter-spacing:.06em}.run-analysis-grid strong{display:inline-block;margin-top:7px;font-size:1.35rem}.run-analysis-grid small{margin-left:4px;color:var(--muted)}.run-trend{margin:14px 0 0;color:var(--accent);font-weight:750}@media(min-width:700px){.run-analysis-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+/* v5.5.2 — live map and share-card ergonomics */
+.live-run-map{width:100%;height:clamp(300px,48vh,520px);background:#101511;border-radius:0 0 20px 20px;overflow:hidden;z-index:0}
+.live-run-map .leaflet-tile-pane{filter:saturate(.72) brightness(.72) contrast(1.06)}
+.live-run-map .leaflet-control-zoom a{background:#111713;color:#b9ff3f;border-color:rgba(255,255,255,.12)}
+.live-run-map .leaflet-control-attribution{background:rgba(5,8,6,.72);color:rgba(255,255,255,.58);font-size:9px}
+.live-run-map .leaflet-control-attribution a{color:#b9ff3f}
+.run-marker-label{background:transparent;border:0;box-shadow:none;color:#071007;font-size:10px;font-weight:900;margin:0!important;line-height:1}
+.run-marker-label:before{display:none}.run-marker-label.current{font-size:8px}
+.share-controls input[type=range]{width:100%;accent-color:var(--accent)}
+.share-close-bottom{position:sticky;bottom:max(12px,env(safe-area-inset-bottom));width:100%;min-height:48px;margin-top:12px;border:1px solid var(--line);border-radius:14px;background:#171b18;color:#fff;font-weight:800;z-index:3}
+.share-run-modal form{padding-bottom:max(8px,env(safe-area-inset-bottom))}
+@media(max-width:560px){.live-run-map{height:46vh;min-height:310px}.share-run-modal{max-height:94dvh}.share-close-bottom{min-height:52px}}
