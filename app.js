@@ -309,12 +309,12 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPro
 // --- ELDYN AI FOOD SCAN v4.1 ---
 let foodScanImageData='',foodScanItems=[],foodScanMealIndex=0;
 const foodScanEls={
-  dialog:document.getElementById('foodScanDialog'),input:document.getElementById('foodScanInput'),preview:document.getElementById('foodScanPreview'),placeholder:document.getElementById('foodScanPlaceholder'),meal:document.getElementById('foodScanMealSelect'),analyze:document.getElementById('analyzeFoodBtn'),status:document.getElementById('foodScanStatus'),results:document.getElementById('foodScanResults'),summary:document.getElementById('foodScanSummary'),add:document.getElementById('addFoodScanItemBtn'),save:document.getElementById('saveFoodScanBtn')
+  dialog:document.getElementById('foodScanDialog'),cameraInput:document.getElementById('foodScanCameraInput'),galleryInput:document.getElementById('foodScanGalleryInput'),cameraBtn:document.getElementById('foodScanCameraBtn'),galleryBtn:document.getElementById('foodScanGalleryBtn'),preview:document.getElementById('foodScanPreview'),placeholder:document.getElementById('foodScanPlaceholder'),meal:document.getElementById('foodScanMealSelect'),analyze:document.getElementById('analyzeFoodBtn'),status:document.getElementById('foodScanStatus'),results:document.getElementById('foodScanResults'),summary:document.getElementById('foodScanSummary'),add:document.getElementById('addFoodScanItemBtn'),save:document.getElementById('saveFoodScanBtn')
 };
 function openFoodScan(index=0){
   const meals=ensureMeals(getLog(activeDate),activeDate);foodScanMealIndex=Math.max(0,Math.min(index,meals.length-1));
   foodScanEls.meal.innerHTML=meals.map((m,i)=>`<option value="${i}" ${i===foodScanMealIndex?'selected':''}>${escapeHtml(m.name)}</option>`).join('');
-  foodScanImageData='';foodScanItems=[];foodScanEls.input.value='';foodScanEls.preview.hidden=true;foodScanEls.placeholder.hidden=false;foodScanEls.analyze.disabled=true;foodScanEls.status.textContent='사진을 선택해 주세요.';foodScanEls.results.innerHTML='';foodScanEls.summary.hidden=true;foodScanEls.add.hidden=true;foodScanEls.save.hidden=true;foodScanEls.dialog.showModal();
+  foodScanImageData='';foodScanItems=[];foodScanEls.cameraInput.value='';foodScanEls.galleryInput.value='';foodScanEls.preview.hidden=true;foodScanEls.placeholder.hidden=false;foodScanEls.analyze.disabled=true;foodScanEls.status.textContent='사진을 선택해 주세요.';foodScanEls.results.innerHTML='';foodScanEls.summary.hidden=true;foodScanEls.add.hidden=true;foodScanEls.save.hidden=true;foodScanEls.dialog.showModal();
 }
 async function imageFileToDataUrl(file){
   if(!file||!file.type.startsWith('image/'))throw new Error('이미지 파일을 선택해 주세요.');
@@ -323,7 +323,8 @@ async function imageFileToDataUrl(file){
   const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(new Error('사진을 열지 못했습니다.'));i.src=raw});
   const max=1280,scale=Math.min(1,max/Math.max(img.width,img.height)),canvas=document.createElement('canvas');canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',.82)
 }
-foodScanEls.input.onchange=async e=>{try{foodScanImageData=await imageFileToDataUrl(e.target.files?.[0]);foodScanEls.preview.src=foodScanImageData;foodScanEls.preview.hidden=false;foodScanEls.placeholder.hidden=true;foodScanEls.analyze.disabled=false;foodScanEls.status.textContent='사진이 준비됐어요. AI 분석하기를 눌러 주세요.'}catch(err){alert(err.message)}};
+async function handleFoodScanFile(file){try{foodScanImageData=await imageFileToDataUrl(file);foodScanEls.preview.src=foodScanImageData;foodScanEls.preview.hidden=false;foodScanEls.placeholder.hidden=true;foodScanEls.analyze.disabled=false;foodScanEls.status.textContent='사진이 준비됐어요. AI 분석하기를 눌러 주세요.'}catch(err){alert(err.message)}}
+foodScanEls.cameraBtn.onclick=()=>foodScanEls.cameraInput.click();foodScanEls.galleryBtn.onclick=()=>foodScanEls.galleryInput.click();foodScanEls.cameraInput.onchange=e=>handleFoodScanFile(e.target.files?.[0]);foodScanEls.galleryInput.onchange=e=>handleFoodScanFile(e.target.files?.[0]);
 foodScanEls.meal.onchange=()=>foodScanMealIndex=+foodScanEls.meal.value||0;
 function normaliseScanItem(x={}){return{name:String(x.name||'음식'),amount:Math.max(0,+x.amount||100),unit:String(x.unit||'g'),kcal:Math.max(0,Math.round(+x.kcal||0)),protein:Math.max(0,roundMacro(+x.protein||0)),carbs:Math.max(0,roundMacro(+x.carbs||0)),fat:Math.max(0,roundMacro(+x.fat||0)),confidence:Math.max(0,Math.min(100,Math.round(+x.confidence||60)))}}
 function renderFoodScanItems(){
@@ -352,13 +353,13 @@ foodScanEls.save.onclick=()=>{
 
 // v4.3 — packaged nutrition label scan and optional meal save
 const nutritionLabelEls={
-  open:document.getElementById('nutritionLabelBtn'),dialog:document.getElementById('nutritionLabelDialog'),input:document.getElementById('nutritionLabelInput'),preview:document.getElementById('nutritionLabelPreview'),placeholder:document.getElementById('nutritionLabelPlaceholder'),analyze:document.getElementById('analyzeNutritionLabelBtn'),status:document.getElementById('nutritionLabelStatus'),result:document.getElementById('nutritionLabelResult'),savePanel:document.getElementById('nutritionLabelSavePanel'),meal:document.getElementById('nutritionLabelMealSelect'),save:document.getElementById('saveNutritionLabelBtn')
+  open:document.getElementById('nutritionLabelBtn'),dialog:document.getElementById('nutritionLabelDialog'),cameraInput:document.getElementById('nutritionLabelCameraInput'),galleryInput:document.getElementById('nutritionLabelGalleryInput'),cameraBtn:document.getElementById('nutritionLabelCameraBtn'),galleryBtn:document.getElementById('nutritionLabelGalleryBtn'),preview:document.getElementById('nutritionLabelPreview'),placeholder:document.getElementById('nutritionLabelPlaceholder'),analyze:document.getElementById('analyzeNutritionLabelBtn'),status:document.getElementById('nutritionLabelStatus'),result:document.getElementById('nutritionLabelResult'),savePanel:document.getElementById('nutritionLabelSavePanel'),meal:document.getElementById('nutritionLabelMealSelect'),save:document.getElementById('saveNutritionLabelBtn')
 };
 let nutritionLabelImageData='',nutritionLabelData=null;
 function openNutritionLabelScan(){
   const meals=ensureMeals(getLog(activeDate),activeDate);
   nutritionLabelEls.meal.innerHTML=meals.map((m,i)=>({m,i})).filter(x=>['breakfast','lunch','dinner'].includes(x.m.key)).map(x=>`<option value="${x.i}">${escapeHtml(x.m.name)}</option>`).join('');
-  nutritionLabelImageData='';nutritionLabelData=null;nutritionLabelEls.input.value='';nutritionLabelEls.preview.hidden=true;nutritionLabelEls.placeholder.hidden=false;nutritionLabelEls.analyze.disabled=true;nutritionLabelEls.status.textContent='사진을 선택해 주세요.';nutritionLabelEls.result.innerHTML='';nutritionLabelEls.savePanel.hidden=true;nutritionLabelEls.dialog.showModal();
+  nutritionLabelImageData='';nutritionLabelData=null;nutritionLabelEls.cameraInput.value='';nutritionLabelEls.galleryInput.value='';nutritionLabelEls.preview.hidden=true;nutritionLabelEls.placeholder.hidden=false;nutritionLabelEls.analyze.disabled=true;nutritionLabelEls.status.textContent='사진을 선택해 주세요.';nutritionLabelEls.result.innerHTML='';nutritionLabelEls.savePanel.hidden=true;nutritionLabelEls.dialog.showModal();
 }
 function safeLabelNumber(v){return Math.max(0,+v||0)}
 function renderNutritionLabelResult(note=''){
@@ -385,7 +386,8 @@ function nutritionLabelScaled(){
 }
 function updateNutritionLabelCalculated(){const y=nutritionLabelScaled(),el=document.getElementById('nutritionLabelCalculated');if(el)el.textContent=`섭취량 환산: ${Math.round(y.kcal)} kcal · P ${roundMacro(y.protein)}g · C ${roundMacro(y.carbs)}g · F ${roundMacro(y.fat)}g · 당류 ${roundMacro(y.sugars)}g · 나트륨 ${Math.round(y.sodium)}mg`}
 if(nutritionLabelEls.open)nutritionLabelEls.open.onclick=openNutritionLabelScan;
-nutritionLabelEls.input.onchange=async e=>{try{nutritionLabelImageData=await imageFileToDataUrl(e.target.files?.[0]);nutritionLabelEls.preview.src=nutritionLabelImageData;nutritionLabelEls.preview.hidden=false;nutritionLabelEls.placeholder.hidden=true;nutritionLabelEls.analyze.disabled=false;nutritionLabelEls.status.textContent='사진이 준비됐어요. 영양정보 분석하기를 눌러 주세요.'}catch(err){alert(err.message)}};
+async function handleNutritionLabelFile(file){try{nutritionLabelImageData=await imageFileToDataUrl(file);nutritionLabelEls.preview.src=nutritionLabelImageData;nutritionLabelEls.preview.hidden=false;nutritionLabelEls.placeholder.hidden=true;nutritionLabelEls.analyze.disabled=false;nutritionLabelEls.status.textContent='사진이 준비됐어요. 영양정보 분석하기를 눌러 주세요.'}catch(err){alert(err.message)}}
+nutritionLabelEls.cameraBtn.onclick=()=>nutritionLabelEls.cameraInput.click();nutritionLabelEls.galleryBtn.onclick=()=>nutritionLabelEls.galleryInput.click();nutritionLabelEls.cameraInput.onchange=e=>handleNutritionLabelFile(e.target.files?.[0]);nutritionLabelEls.galleryInput.onchange=e=>handleNutritionLabelFile(e.target.files?.[0]);
 nutritionLabelEls.analyze.onclick=async()=>{
   if(!nutritionLabelImageData)return;if(!supabaseClient||!currentUser){alert('AI 분석을 사용하려면 ◎ 버튼에서 로그인해 주세요.');return}
   nutritionLabelEls.analyze.disabled=true;nutritionLabelEls.status.textContent='AI가 영양정보표의 숫자와 기준량을 읽고 있어요…';
