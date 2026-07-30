@@ -1,18 +1,33 @@
-# ELDYN v5.5.2 — Running UX Update
+# ELDYN v5 — Nutrition Edition
 
-## 적용된 개선
+**Move Forward.**  
+**Every Limit Defines Your Next.**
 
-- 러닝 중 가짜 격자 경로 화면을 실제 OpenStreetMap 기반 라이브 지도로 교체
-- 현재 위치 자동 추적 및 형광 초록색 GPS 이동 경로 표시
-- 시작 위치(S)와 현재 위치 마커 표시
-- 인증 카드의 이동선을 기록 텍스트 바로 위로 이동
-- 인증 카드 기본 흰색 텍스트 크기 축소
-- 사용자가 Text / Route / Logo 크기를 슬라이더로 조절 가능
-- 상단 X 닫기 버튼 제거, 하단 Safe Area 위에 Close 버튼 배치
-- 사진형 인증 카드에서 중복 거리 텍스트 제거
+ELDYN v5 is the new baseline release. It retains the existing GPS running, profile, progress, meal logging and Supabase sync features, and standardizes the Nutrition workflow around the deployed `analyze-food` Edge Function.
 
-## 참고
+## Nutrition features
 
-- 실시간 지도 타일을 표시하려면 인터넷 연결이 필요합니다.
-- GPS는 HTTPS 환경에서만 정상 동작합니다.
-- iPhone PWA는 앱이 완전히 종료되거나 장시간 백그라운드로 전환되면 GPS 추적이 중단될 수 있습니다.
+- Expanded Korean/English food search
+- Recent foods and favourites
+- Manual nutrition entry
+- Food photo AI analysis
+- Packaged-food nutrition label scan
+- Editable analysis result before saving
+- Portion-based automatic recalculation
+- Save to breakfast, lunch, dinner or snack
+- AI one-line nutrition note
+- Daily calories and macro totals
+
+## Deployment
+
+1. Keep your existing `config.js` Supabase project URL and publishable/anon key.
+2. Upload the web files in this folder to the existing GitHub repository and commit.
+3. Vercel will redeploy automatically when connected to that repository.
+4. Supabase Edge Function name must be exactly `analyze-food`.
+5. Supabase Edge Function Secret must contain `OPENAI_API_KEY`.
+
+The canonical Edge Function source is located at:
+
+`supabase/functions/analyze-food/index.ts`
+
+Never put the OpenAI API key or Supabase secret/service-role key in GitHub or `config.js`.
