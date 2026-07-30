@@ -201,7 +201,43 @@ saveSettingsBtn.onclick=()=>{const theme=document.querySelector('input[name="eld
 async function initSupabase(){const c=window.ELLEN_CONFIG||{},badge=document.getElementById('connectionBadge');if(!c.SUPABASE_URL||!c.SUPABASE_ANON_KEY){syncNowBtn.disabled=true;syncStatus.textContent='Supabase configuration is missing.';return}if(!window.supabase){syncStatus.textContent='Internet connection required.';return}try{supabaseClient=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const{data,error}=await supabaseClient.auth.getSession();if(error)throw error;setUser(data.session?.user||null);supabaseClient.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null))}catch(e){syncStatus.textContent='Cloud connection failed: '+e.message}}
 function setUser(user){currentUser=user;cloudHydrated=false;authTitle.textContent=user?user.email:'Cloud ready';syncStatus.textContent=user?'Loading cloud data…':'Supabase is connected. Create an account or sign in.';authFields.hidden=!!user;signOutBtn.hidden=!user;syncNowBtn.disabled=!user;if(user)cloudPull();}
 signInBtn.onclick=()=>authAction('signin');signUpBtn.onclick=()=>authAction('signup');signOutBtn.onclick=async()=>{await supabaseClient?.auth.signOut();setUser(null)};syncNowBtn.onclick=()=>cloudSync(true);async function authAction(mode){if(!supabaseClient)return alert('Cloud connection is not ready.');const email=emailInput.value.trim(),password=passwordInput.value;if(!email||password.length<6)return alert('Enter an email and a password with at least 6 characters.');const fn=mode==='signup'?'signUp':'signInWithPassword',r=await supabaseClient.auth[fn]({email,password});if(r.error)alert(r.error.message);else alert(mode==='signup'?'Account created. You can sign in now if email confirmation is disabled.':'Signed in. Cloud sync is active.')}
-let syncTimer;function scheduleCloudSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>cloudSync(false),800)}async function cloudSync(show=false){if(!supabaseClient||!currentUser||!cloudHydrated)return;syncStatus.textContent='Syncing…';const rows=Object.entries(state.logs).map(([date,payload])=>({user_id:currentUser.id,date,payload,updated_at:payload.updatedAt||new Date().toISOString()})),{error}=rows.length?await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}):{error:null};syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(show)alert(error?error.message:'Sync complete.')}async function cloudPull(){if(!supabaseClient||!currentUser)return;syncStatus.textContent='Loading cloud data…';const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);if(error){syncStatus.textContent='Could not load cloud data.';return}for(const row of data||[]){if(!row?.date||!row?.payload)continue;const local=state.logs[row.date]||{};state.logs[row.date]={...local,...row.payload,updatedAt:row.payload.updatedAt||row.updated_at||local.updatedAt};}localStorage.setItem(STORAGE_KEY,JSON.stringify(state));cloudHydrated=true;render();syncStatus.textContent='Cloud data restored.';}
+let syncTimer;function scheduleCloudSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>cloudSync(false),800)}async function cloudSync(show=false){if(!supabaseClient||!currentUser||!cloudHydrated)return;syncStatus.textContent='Syncing…';const rows=Object.entries(state.logs).map(([date,payload])=>({user_id:currentUser.id,date,payload,updated_at:payload.updatedAt||new Date().toISOString()})),{error}=rows.length?await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}):{error:null};syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(show)alert(error?error.message:'Sync complete.')}function recoverRunsFromLogs(){
+  const byId=new Map();
+  for(const run of state.runs||[]){if(run?.id)byId.set(run.id,run)}
+  for(const log of Object.values(state.logs||{})){
+    for(const run of log?.runs||[]){
+      if(!run)continue;
+      const id=run.id||`${run.endedAt||run.startedAt||''}-${run.distanceKm||0}-${run.durationMs||0}`;
+      if(!byId.has(id))byId.set(id,{...run,id});
+    }
+  }
+  state.runs=[...byId.values()].sort((a,b)=>new Date(a.endedAt||a.startedAt||0)-new Date(b.endedAt||b.startedAt||0));
+}
+function recoverMealsFromLogs(){
+  for(const log of Object.values(state.logs||{})){
+    if(!Array.isArray(log?.mealPlan))continue;
+    log.mealPlan=log.mealPlan.map(m=>({...m,foodItems:Array.isArray(m.foodItems)?m.foodItems:[]}));
+    syncFoodTotals(log,log.mealPlan);
+  }
+}
+async function cloudPull(){
+  if(!supabaseClient||!currentUser)return;
+  syncStatus.textContent='Loading cloud data…';
+  const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);
+  if(error){syncStatus.textContent='Could not load cloud data.';return}
+  for(const row of data||[]){
+    if(!row?.date||!row?.payload)continue;
+    const local=state.logs[row.date]||{};
+    const cloud=row.payload||{};
+    state.logs[row.date]={...local,...cloud,updatedAt:cloud.updatedAt||row.updated_at||local.updatedAt};
+  }
+  recoverMealsFromLogs();
+  recoverRunsFromLogs();
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  cloudHydrated=true;
+  render();
+  syncStatus.textContent=`Cloud restored · runs ${state.runs.length}`;
+}
 
 
 // ELDYN live running + privacy + share card
