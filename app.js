@@ -1,4 +1,5 @@
 const STORAGE_KEY='eldyn-project-v3';
+const LEGACY_STORAGE_KEYS=['eldyn-project-v5','eldyn-project-v4','eldyn-project-v2','eldyn-project-v1','ellens-project-v3','ellens-project-v2','ellens-project-v1'];
 const ex=(id,name,sets,reps,weight,target,instructions,search)=>({id,name,sets,reps,weight,done:false,target,instructions,youtube:'',search});
 const weeklyPlan={
   0:{name:'Recovery & Mobility',exercises:[ex('sun-walk','Recovery Walk',1,30,0,'Cardiovascular recovery','Walk at an easy pace. Keep your breathing relaxed.','recovery walk workout'),ex('sun-mobility','Full Body Mobility',1,15,0,'Hips · Shoulders · Spine','Move slowly through a comfortable range. Do not force painful positions.','15 minute full body mobility')]},
@@ -78,7 +79,22 @@ function yesterdayRecommendation(){const y=getLog(shiftDate(activeDate,-1)),name
 const defaults={runs:[],settings:{name:'Ellen',sex:'female',age:37,height:160,currentWeight:78,currentBodyFat:'',goalWeight:74.5,goalMode:'fatloss',activity:1.55,mealCount:4,theme:'performance',waterGoal:2500,sleepGoal:7.5,proteinGoal:125,calorieGoal:1650,carbGoal:165,fatGoal:55},logs:{},body:[],lastCelebrated:{}};
 let state=loadState(),runSession=null,runTimer=null,runWatchId=null,runWakeLock=null,activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null;
 function todayKey(){return new Date().toLocaleDateString('en-CA')}function clone(v){return JSON.parse(JSON.stringify(v))}function dateFromKey(k){const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d)}function keyFromDate(d){return d.toLocaleDateString('en-CA')}function shiftDate(k,n){const d=dateFromKey(k);d.setDate(d.getDate()+n);return keyFromDate(d)}
-function loadState(){try{const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem('ellens-project-v2')||localStorage.getItem('ellens-project-v1')||'{}',parsed=JSON.parse(raw);return {...clone(defaults),...parsed,settings:{...clone(defaults).settings,...(parsed.settings||{})}}}catch{return clone(defaults)}}function saveState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));scheduleCloudSync()}
+function isStateLike(v){return v&&typeof v==='object'&&(v.logs||v.settings||v.runs||v.body)}
+function mergeState(base,incoming){if(!isStateLike(incoming))return base;return {...base,...incoming,logs:{...(base.logs||{}),...(incoming.logs||{})},settings:{...(base.settings||{}),...(incoming.settings||{})},runs:Array.isArray(incoming.runs)?incoming.runs:(base.runs||[]),body:Array.isArray(incoming.body)?incoming.body:(base.body||[])}}
+function loadState(){
+  let result=clone(defaults),found=false;
+  try{
+    const keys=[STORAGE_KEY,...LEGACY_STORAGE_KEYS];
+    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&/(eldyn|ellen)/i.test(k)&&!keys.includes(k))keys.push(k)}
+    for(const key of keys){
+      const raw=localStorage.getItem(key);if(!raw)continue;
+      try{const parsed=JSON.parse(raw);if(isStateLike(parsed)){result=mergeState(result,parsed);found=true}}catch{}
+    }
+    if(found)localStorage.setItem(STORAGE_KEY,JSON.stringify(result));
+    return result;
+  }catch{return result}
+}
+function saveState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));scheduleCloudSync()}
 function plannedExercises(date){return clone(weeklyPlan[dateFromKey(date).getDay()].exercises).map(x=>({...x,id:x.id+'-'+date,done:false}))}
 function isLegacyDefaults(list=[]){const names=list.map(x=>x.name).join('|');return names==='Barbell Squat|Seated Cable Row|Easy Run'}
 function getLog(date=activeDate){
@@ -199,9 +215,27 @@ regenerateMealsBtn.onclick=()=>{delete getLog(activeDate).mealPlan;saveState();r
 mealPlanList.onclick=e=>{const c=e.target.closest('[data-meal-change]'),d=e.target.closest('[data-meal-done]'),edit=e.target.closest('[data-meal-edit]'),food=e.target.closest('[data-meal-food]'),scan=e.target.closest('[data-meal-scan]'),l=getLog(activeDate),meals=ensureMeals(l,activeDate);if(scan){openFoodScan(+scan.dataset.mealScan);return}else if(food){openFoodEditor(+food.dataset.mealFood);return}else if(edit){const m=meals[+edit.dataset.mealEdit],current=m.customText||mealChoices[m.key][m.choice%mealChoices[m.key].length],value=prompt(`${m.name} 식단 메모를 입력하세요.`,current);if(value===null)return;m.customText=value.trim();if(!m.customText)delete m.customText}else if(c){const m=meals[+c.dataset.mealChange];delete m.customText;m.foodItems=[];m.choice=(m.choice+1)%mealChoices[m.key].length}else if(d){meals[+d.dataset.mealDone].done=!meals[+d.dataset.mealDone].done}else return;syncFoodTotals(l,meals);l.priorities.nutrition=meals.every(x=>x.done);saveState();render()}
 saveSettingsBtn.onclick=()=>{const theme=document.querySelector('input[name="eldynTheme"]:checked')?.value||'performance';Object.assign(state.settings,{theme,waterGoal:+waterGoal.value||2000,sleepGoal:+sleepGoal.value||7.5,proteinGoal:+proteinGoal.value||120,calorieGoal:+calorieGoal.value||1800});applyTheme(theme);saveState();render();alert('Theme and targets saved.')};saveBodyBtn.onclick=()=>{state.body=state.body.filter(x=>x.date!==todayKey());state.body.push({date:todayKey(),weight:+weightInput.value||null,bodyFat:+bodyFatInput.value||null,waist:+waistInput.value||null,muscle:+muscleInput.value||null});saveState();alert('Body record saved.')};exportBtn.onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`eldyn-backup-${todayKey()}.json`;a.click();URL.revokeObjectURL(a.href)};importInput.onchange=async e=>{try{state={...clone(defaults),...JSON.parse(await e.target.files[0].text())};saveState();render();alert('Backup imported.')}catch{alert('That backup file could not be read.')}};celebrationClose.onclick=()=>celebrationDialog.close();profileBtn.onclick=()=>accountDialog.showModal();
 async function initSupabase(){const c=window.ELLEN_CONFIG||{},badge=document.getElementById('connectionBadge');if(!c.SUPABASE_URL||!c.SUPABASE_ANON_KEY){syncNowBtn.disabled=true;syncStatus.textContent='Supabase configuration is missing.';return}if(!window.supabase){syncStatus.textContent='Internet connection required.';return}try{supabaseClient=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const{data,error}=await supabaseClient.auth.getSession();if(error)throw error;setUser(data.session?.user||null);supabaseClient.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null))}catch(e){syncStatus.textContent='Cloud connection failed: '+e.message}}
-function setUser(user){currentUser=user;authTitle.textContent=user?user.email:'Cloud ready';syncStatus.textContent=user?'Synced just now.':'Supabase is connected. Create an account or sign in.';authFields.hidden=!!user;signOutBtn.hidden=!user;syncNowBtn.disabled=!user;if(user)cloudPull()}
+function setUser(user){currentUser=user;cloudHydrated=!user;authTitle.textContent=user?user.email:'Cloud ready';syncStatus.textContent=user?'기존 데이터를 불러오는 중…':'Supabase is connected. Create an account or sign in.';authFields.hidden=!!user;signOutBtn.hidden=!user;syncNowBtn.disabled=!user;if(user)cloudPull()}
 signInBtn.onclick=()=>authAction('signin');signUpBtn.onclick=()=>authAction('signup');signOutBtn.onclick=async()=>{await supabaseClient?.auth.signOut();setUser(null)};syncNowBtn.onclick=()=>cloudSync(true);async function authAction(mode){if(!supabaseClient)return alert('Cloud connection is not ready.');const email=emailInput.value.trim(),password=passwordInput.value;if(!email||password.length<6)return alert('Enter an email and a password with at least 6 characters.');const fn=mode==='signup'?'signUp':'signInWithPassword',r=await supabaseClient.auth[fn]({email,password});if(r.error)alert(r.error.message);else alert(mode==='signup'?'Account created. You can sign in now if email confirmation is disabled.':'Signed in. Cloud sync is active.')}
-let syncTimer;function scheduleCloudSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>cloudSync(false),800)}async function cloudSync(show=false){if(!supabaseClient||!currentUser)return;syncStatus.textContent='Syncing…';const rows=Object.entries(state.logs).map(([date,payload])=>({user_id:currentUser.id,date,payload,updated_at:payload.updatedAt||new Date().toISOString()})),{error}=rows.length?await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}):{error:null};syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(show)alert(error?error.message:'Sync complete.')}async function cloudPull(){if(!supabaseClient||!currentUser)return;const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);if(error){syncStatus.textContent='Could not load cloud data.';return}for(const row of data||[]){const local=state.logs[row.date];if(!local||new Date(row.updated_at)>new Date(local.updatedAt||0))state.logs[row.date]=row.payload}localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render();syncStatus.textContent='Cloud data loaded.'}
+let syncTimer,cloudHydrated=false;
+function scheduleCloudSync(){clearTimeout(syncTimer);if(!cloudHydrated)return;syncTimer=setTimeout(()=>cloudSync(false),800)}
+function hasMeaningfulLog(log){if(!log||typeof log!=='object')return false;const ignore=new Set(['updatedAt','planInitialized','planSource','planName','originalPlan']);return Object.entries(log).some(([k,v])=>{if(ignore.has(k))return false;if(Array.isArray(v))return v.length>0;if(v&&typeof v==='object')return Object.keys(v).length>0;if(typeof v==='number')return v!==0;return v!==''&&v!==false&&v!=null})}
+async function cloudSync(show=false){if(!supabaseClient||!currentUser||!cloudHydrated)return;syncStatus.textContent='Syncing…';const rows=Object.entries(state.logs).map(([date,payload])=>({user_id:currentUser.id,date,payload,updated_at:payload.updatedAt||new Date().toISOString()})),{error}=rows.length?await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}):{error:null};syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(show)alert(error?error.message:'Sync complete.')}
+async function cloudPull(){
+  if(!supabaseClient||!currentUser)return;
+  cloudHydrated=false;
+  const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);
+  if(error){syncStatus.textContent='Could not load cloud data.';return}
+  for(const row of data||[]){
+    const local=state.logs[row.date],remote=row.payload||{};
+    const localTime=new Date(local?.updatedAt||0).getTime(),remoteTime=new Date(row.updated_at||remote.updatedAt||0).getTime();
+    if(!local||!hasMeaningfulLog(local)||hasMeaningfulLog(remote)||remoteTime>=localTime){state.logs[row.date]={...(local||{}),...remote}}
+  }
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  cloudHydrated=true;
+  render();
+  syncStatus.textContent='기존 데이터 복구 완료.';
+}
 
 
 // ELDYN live running + privacy + share card
