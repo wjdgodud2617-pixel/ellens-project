@@ -1,4 +1,4 @@
-# ELLEN'S PROJECT 웹 배포 — 가장 쉬운 방법
+# ELDYN 웹 배포 — 가장 쉬운 방법
 
 ## 1. GitHub 저장소 만들기
 1. github.com 로그인

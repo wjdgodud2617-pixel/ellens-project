@@ -1,4 +1,4 @@
-# ELLEN'S PROJECT 동기화 마무리
+# ELDYN 동기화 마무리
 
 Supabase 주소와 공개 키는 이미 `config.js`에 연결되어 있습니다.
 

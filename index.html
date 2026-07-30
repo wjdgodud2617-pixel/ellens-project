@@ -6,19 +6,19 @@
   <meta name="theme-color" content="#0b0d0c" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="description" content="ELLEN'S PROJECT — a local-first workout, recovery and nutrition tracker." />
+  <meta name="description" content="ELDYN — training, nutrition and running in one place." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
-  <title>ELLEN'S PROJECT — Mobile Fitness OS</title>
+  <title>ELDYN — Personal Performance App</title>
 </head>
 <body>
   <div id="app">
     <header class="topbar">
       <div>
-        <p class="eyebrow">ELLEN'S PROJECT</p>
+        <p class="eyebrow">ELDYN</p>
         <h1 id="greeting">Good day, Ellen.</h1>
-        <p class="slogan">Smile. Train. Become the Machine.</p>
+        <p class="slogan">Move Forward.</p>
       </div>
       <button id="profileBtn" class="icon-btn" aria-label="Account and sync">◎</button>
     </header>
@@ -38,7 +38,7 @@
         <div id="priorityGrid" class="priority-grid"></div>
 
 
-        <div class="section-head"><h2>Today's meal plan</h2><button id="regenerateMealsBtn" class="text-btn">Regenerate</button></div>
+        <div class="section-head"><h2>Today's meal plan</h2><div><button id="nutritionLabelBtn" class="text-btn">영양표 분석</button><button id="regenerateMealsBtn" class="text-btn">Regenerate</button></div></div>
         <div id="nutritionTargetCard" class="nutrition-target panel-lite"></div>
         <div id="mealPlanList" class="meal-plan-list"></div>
 
@@ -59,6 +59,61 @@
           <label class="field-card"><span>Protein (g)</span><input id="proteinInput" type="number" min="0" step="5" inputmode="numeric" /></label>
         </div>
         <label class="memo-card"><span>Daily memo</span><textarea id="memoInput" rows="3" placeholder="How did today feel?"></textarea></label>
+      </section>
+
+
+      <section id="run" class="view" aria-label="Live running tracker">
+        <div class="run-hero">
+          <div>
+            <p class="eyebrow">LIVE GPS RUN</p>
+            <h2 id="runStatusTitle">Ready to run</h2>
+            <p id="runStatusNote" class="muted">Go outdoors, allow location access, then tap Start Run.</p>
+          </div>
+          <span id="gpsBadge" class="gps-badge">GPS waiting</span>
+        </div>
+
+        <div class="run-privacy panel-lite">
+          <label class="gps-toggle">
+            <input id="gpsEnabledToggle" type="checkbox" checked />
+            <span>
+              <strong>GPS route tracking</strong>
+              <small>Turn off for a timer-only private run. Distance can be entered manually when you finish.</small>
+            </span>
+          </label>
+          <label class="gps-toggle auto-pause-toggle">
+            <input id="autoPauseToggle" type="checkbox" checked />
+            <span><strong>Auto Pause</strong><small>Automatically pauses after a few seconds without movement and resumes when you start again.</small></span>
+          </label>
+        </div>
+
+        <div class="route-panel">
+          <div class="route-panel-head"><span>LIVE ROUTE</span><strong id="gpsQuality">WAITING</strong></div>
+          <canvas id="liveRouteCanvas" width="900" height="360" aria-label="Live running route"></canvas>
+        </div>
+
+        <div class="run-metrics">
+          <div class="run-primary-metric"><span>TIME</span><strong id="runTime">00:00:00</strong></div>
+          <div class="run-primary-metric"><span>DISTANCE</span><strong><b id="runDistance">0.00</b> <small>km</small></strong></div>
+          <div class="run-metric"><span>CURRENT PACE</span><strong id="runCurrentPace">--'--&quot;</strong><small>/km</small></div>
+          <div class="run-metric"><span>AVG PACE</span><strong id="runAveragePace">--'--&quot;</strong><small>/km</small></div>
+          <div class="run-metric"><span>CALORIES</span><strong id="runCalories">0</strong><small>kcal</small></div>
+          <div class="run-metric"><span>GPS ACCURACY</span><strong id="runAccuracy">--</strong><small>m</small></div>
+          <div class="run-metric"><span>MOVING TIME</span><strong id="runMovingTime">00:00:00</strong></div>
+          <div class="run-metric"><span>TOP SPEED</span><strong id="runTopSpeed">0.0</strong><small>km/h</small></div>
+        </div>
+
+        <div class="run-controls">
+          <button id="startRunBtn" class="run-start-btn">▶ Start Run</button>
+          <button id="pauseRunBtn" class="secondary-btn" hidden>Ⅱ Pause</button>
+          <button id="finishRunBtn" class="danger-btn" hidden>■ Finish</button>
+        </div>
+        <p class="fine-print run-safety">For safety, check traffic and surroundings. Keep this PWA open for continuous GPS. iPhone browsers cannot guarantee tracking after the app is fully closed or suspended.</p>
+
+        <div class="section-head"><h2>Live splits</h2></div>
+        <div id="runSplits" class="run-splits"><div class="empty-state"><span>🏃</span><p>Your 1 km splits will appear here.</p></div></div>
+
+        <div class="section-head"><h2>Recent runs</h2></div>
+        <div id="runHistory" class="stack"></div>
       </section>
 
       <section id="plan" class="view" aria-label="Weekly plan">
@@ -128,6 +183,7 @@
 
     <nav class="bottom-nav" aria-label="Primary navigation">
       <button data-view="today" class="active"><span>●</span>Today</button>
+      <button data-view="run"><span>▶</span>Run</button>
       <button data-view="plan"><span>≡</span>Plan</button>
       <button data-view="calendar"><span>▦</span>Calendar</button>
       <button data-view="progress"><span>↗</span>Progress</button>
@@ -153,6 +209,82 @@
       <label>How to perform<textarea name="instructions" rows="3" placeholder="Optional technique notes"></textarea></label>
       <label>YouTube URL or video ID<input name="youtube" placeholder="Optional" /></label>
       <button class="primary-btn" id="exerciseFormSubmit" type="submit">Add exercise</button>
+    </form>
+  </dialog>
+
+  <dialog id="shareRunDialog" class="modal share-run-modal">
+    <form method="dialog">
+      <button class="close-btn" value="cancel" aria-label="Close">×</button>
+      <p class="eyebrow">ELDYN RUN CERTIFIED</p>
+      <h2>Create Run Share Card</h2>
+      <p class="muted">Choose a photo, add a line, and export an Instagram-ready card.</p>
+
+      <div class="share-controls">
+        <label class="field-card"><span>Background photo</span><input id="sharePhotoInput" type="file" accept="image/*" /></label>
+        <label class="field-card"><span>Format</span>
+          <select id="shareRatioSelect">
+            <option value="story">Story · 9:16</option>
+            <option value="feed" selected>Feed · 4:5</option>
+            <option value="square">Square · 1:1</option>
+          </select>
+        </label>
+        <label class="memo-card"><span>Caption</span><textarea id="shareCaptionInput" rows="2" maxlength="90" placeholder="Today, I showed up. (ง •̀_•́)ง"></textarea></label>
+      </div>
+
+      <canvas id="shareCanvas" width="1080" height="1350" aria-label="Run share card preview"></canvas>
+      <div class="share-actions">
+        <button id="renderShareBtn" type="button" class="secondary-btn">Refresh preview</button>
+        <button id="downloadShareBtn" type="button" class="primary-btn">Save image</button>
+        <button id="nativeShareBtn" type="button" class="primary-btn">Share</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="foodScanDialog" class="modal food-scan-modal">
+    <form method="dialog">
+      <button class="close-btn" value="cancel" aria-label="Close">×</button>
+      <p class="eyebrow">ELDYN AI FOOD SCAN</p>
+      <h2>사진으로 식단 기록</h2>
+      <p class="muted">음식 사진을 촬영하거나 선택하면 예상 음식명·양·영양성분을 분석합니다. 저장 전 반드시 결과를 확인해 주세요.</p>
+      <label class="food-scan-drop">
+        <input id="foodScanInput" type="file" accept="image/*" capture="environment" hidden />
+        <img id="foodScanPreview" alt="선택한 음식 사진 미리보기" hidden />
+        <span id="foodScanPlaceholder">📷<b>음식 사진 촬영 또는 선택</b><small>한 접시 전체가 보이도록 촬영하면 더 좋아요.</small></span>
+      </label>
+      <div class="form-row food-scan-top-actions">
+        <label>식사 선택<select id="foodScanMealSelect"></select></label>
+        <button id="analyzeFoodBtn" type="button" class="primary-btn" disabled>AI 분석하기</button>
+      </div>
+      <div id="foodScanStatus" class="food-scan-status muted">사진을 선택해 주세요.</div>
+      <div id="foodScanResults" class="food-scan-results"></div>
+      <div id="foodScanSummary" class="meal-total" hidden></div>
+      <div class="share-actions">
+        <button id="addFoodScanItemBtn" type="button" class="secondary-btn" hidden>+ 음식 추가</button>
+        <button id="saveFoodScanBtn" type="button" class="primary-btn" hidden>식단에 저장</button>
+      </div>
+      <p class="fine-print">AI 결과는 추정치이며 조리법·양·소스에 따라 실제 영양성분과 다를 수 있습니다.</p>
+    </form>
+  </dialog>
+
+  <dialog id="nutritionLabelDialog" class="modal food-scan-modal">
+    <form method="dialog">
+      <button class="close-btn" value="cancel" aria-label="Close">×</button>
+      <p class="eyebrow">ELDYN NUTRITION LABEL SCAN</p>
+      <h2>영양정보표 사진 분석</h2>
+      <p class="muted">제품 뒷면의 영양정보표를 촬영하면 제품명·총 내용량·1회 제공량·열량과 주요 영양성분을 읽어 정리합니다.</p>
+      <label class="food-scan-drop">
+        <input id="nutritionLabelInput" type="file" accept="image/*" capture="environment" hidden />
+        <img id="nutritionLabelPreview" alt="선택한 영양정보표 사진" hidden />
+        <span id="nutritionLabelPlaceholder">📋<b>영양정보표 촬영 또는 선택</b><small>표 전체가 수평으로 선명하게 보이도록 촬영해 주세요.</small></span>
+      </label>
+      <button id="analyzeNutritionLabelBtn" type="button" class="primary-btn" disabled>영양정보 분석하기</button>
+      <div id="nutritionLabelStatus" class="food-scan-status muted">사진을 선택해 주세요.</div>
+      <div id="nutritionLabelResult" class="nutrition-label-result"></div>
+      <div id="nutritionLabelSavePanel" class="nutrition-label-save" hidden>
+        <label>식단에 저장할 위치<select id="nutritionLabelMealSelect"></select></label>
+        <button id="saveNutritionLabelBtn" type="button" class="primary-btn">선택한 식단에 저장</button>
+      </div>
+      <p class="fine-print">AI 판독 결과는 촬영 상태와 제품 표기 방식에 따라 오류가 있을 수 있습니다. 저장 전 숫자를 확인해 주세요.</p>
     </form>
   </dialog>
 

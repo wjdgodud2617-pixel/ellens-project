@@ -1,4 +1,4 @@
-# ELLEN'S PROJECT v2 시작하기
+# ELDYN v2 시작하기
 
 1. 이 폴더의 `start-local-server.bat`를 더블클릭합니다.
 2. 브라우저에서 `http://localhost:8080`을 엽니다.

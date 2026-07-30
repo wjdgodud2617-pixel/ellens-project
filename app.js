@@ -1,4 +1,4 @@
-const STORAGE_KEY='ellens-project-v2';
+const STORAGE_KEY='eldyn-project-v3';
 const ex=(id,name,sets,reps,weight,target,instructions,search)=>({id,name,sets,reps,weight,done:false,target,instructions,youtube:'',search});
 const weeklyPlan={
   0:{name:'Recovery & Mobility',exercises:[ex('sun-walk','Recovery Walk',1,30,0,'Cardiovascular recovery','Walk at an easy pace. Keep your breathing relaxed.','recovery walk workout'),ex('sun-mobility','Full Body Mobility',1,15,0,'Hips · Shoulders · Spine','Move slowly through a comfortable range. Do not force painful positions.','15 minute full body mobility')]},
@@ -9,10 +9,10 @@ const weeklyPlan={
   5:{name:'Upper Body Pull',exercises:[ex('fri-pulldown','Lat Pulldown',4,10,25,'Lats · Biceps','Pull elbows toward your ribs without leaning far back.','lat pulldown proper form'),ex('fri-row','Seated Cable Row',3,12,25,'Lats · Rhomboids · Biceps','Keep the torso stable, pull elbows back, and return under control.','seated cable row proper form'),ex('fri-face','Face Pull',3,15,10,'Rear Delts · Upper Back','Pull toward eye level and rotate the hands apart.','cable face pull proper form'),ex('fri-curl','Dumbbell Curl',3,12,6,'Biceps','Keep elbows still and avoid swinging.','dumbbell biceps curl form'),ex('fri-carry','Farmer Carry',4,30,12,'Grip · Core · Traps','Walk tall with short controlled steps and steady breathing.','farmer carry proper form')]},
   6:{name:'HYROX / Full Body',exercises:[ex('sat-row','Row Erg',1,1000,0,'Full Body · Cardio','Drive with the legs first, then lean and pull. Recover in reverse order.','rowing machine proper technique'),ex('sat-burpee','Burpee Broad Jump',4,10,0,'Full Body · Cardio','Land softly, keep a steady rhythm, and scale the jump when needed.','burpee broad jump hyrox technique'),ex('sat-carry','Farmer Carry',4,50,16,'Grip · Core · Legs','Keep shoulders down and walk with controlled steps.','farmer carry hyrox technique'),ex('sat-lunge','Walking Lunge',4,20,0,'Glutes · Quadriceps','Stay tall and let the back knee move toward the floor.','walking lunge proper form'),ex('sat-wallball','Wall Ball',4,15,6,'Legs · Shoulders · Cardio','Squat with the ball at chest height and use leg drive to throw.','wall ball proper form')]}
 };
-const defaults={settings:{name:'Ellen',sex:'female',age:37,height:160,currentWeight:78,currentBodyFat:'',goalWeight:74.5,goalMode:'fatloss',activity:1.55,mealCount:4,waterGoal:2500,sleepGoal:7.5,proteinGoal:125,calorieGoal:1650,carbGoal:165,fatGoal:55},logs:{},body:[],lastCelebrated:{}};
-let state=loadState(),activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null;
+const defaults={runs:[],settings:{name:'Ellen',sex:'female',age:37,height:160,currentWeight:78,currentBodyFat:'',goalWeight:74.5,goalMode:'fatloss',activity:1.55,mealCount:4,waterGoal:2500,sleepGoal:7.5,proteinGoal:125,calorieGoal:1650,carbGoal:165,fatGoal:55},logs:{},body:[],lastCelebrated:{}};
+let state=loadState(),runSession=null,runTimer=null,runWatchId=null,runWakeLock=null,activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null;
 function todayKey(){return new Date().toLocaleDateString('en-CA')}function clone(v){return JSON.parse(JSON.stringify(v))}function dateFromKey(k){const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d)}function keyFromDate(d){return d.toLocaleDateString('en-CA')}function shiftDate(k,n){const d=dateFromKey(k);d.setDate(d.getDate()+n);return keyFromDate(d)}
-function loadState(){try{const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem('ellens-project-v1')||'{}',parsed=JSON.parse(raw);return {...clone(defaults),...parsed,settings:{...clone(defaults).settings,...(parsed.settings||{})}}}catch{return clone(defaults)}}function saveState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));scheduleCloudSync()}
+function loadState(){try{const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem('ellens-project-v2')||localStorage.getItem('ellens-project-v1')||'{}',parsed=JSON.parse(raw);return {...clone(defaults),...parsed,settings:{...clone(defaults).settings,...(parsed.settings||{})}}}catch{return clone(defaults)}}function saveState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));scheduleCloudSync()}
 function plannedExercises(date){return clone(weeklyPlan[dateFromKey(date).getDay()].exercises).map(x=>({...x,id:x.id+'-'+date,done:false}))}
 function isLegacyDefaults(list=[]){const names=list.map(x=>x.name).join('|');return names==='Barbell Squat|Seated Cable Row|Easy Run'}
 function getLog(date=activeDate){
@@ -32,32 +32,47 @@ function mood(s){if(s===0)return{emoji:'😔',line:'You can always restart.',tit
 const mealChoices={breakfast:['달걀 2개 · 그릭요거트 · 블루베리','오트밀 · 우유 · 바나나 · 달걀','통밀토스트 · 달걀 · 토마토'],lunch:['일반식 · 밥 반 공기 · 단백질 반찬 · 채소','현미밥 · 닭다리살 · 구운채소','포케 · 현미밥 · 연어 · 채소'],snack:['프로틴 음료 · 과일','그릭요거트 · 아몬드 소량','바나나 · 삶은 달걀'],dinner:['닭가슴살 또는 두부 · 샐러드 · 고구마','연어 · 구운채소 · 잡곡밥 소량','소고기 우둔살 · 샐러드 · 감자']};
 
 const FOOD_DB=[
- ['흰쌀밥',210,150,'g',4,46,0.5],['현미밥',218,150,'g',4.5,45,2],['잡곡밥',225,150,'g',5,46,2],['고구마',129,150,'g',2,30,0.2],['오트밀',190,50,'g',6.5,34,3.5],['통밀빵',150,2,'장',6,28,2],
- ['닭가슴살',165,100,'g',31,0,3.6],['닭다리살',190,100,'g',24,0,10],['소고기 우둔살',170,100,'g',27,0,7],['돼지 안심',143,100,'g',26,0,4],['연어',208,100,'g',20,0,13],['흰살생선',120,100,'g',24,0,2],['참치캔(물)',116,100,'g',26,0,1],
- ['삶은 달걀',70,1,'개',6,0.5,5],['두부',80,100,'g',8,2,5],['그릭요거트',120,150,'g',15,8,3],['우유',125,200,'ml',6.5,10,7],['무가당 두유',95,190,'ml',7,4,5],['프로틴 음료',150,1,'병',25,8,2],
- ['바나나',105,1,'개',1.3,27,0.4],['사과',95,1,'개',0.5,25,0.3],['블루베리',57,100,'g',0.7,14,0.3],['아몬드',116,20,'g',4,4,10],['샐러드 채소',35,150,'g',2,7,0.4],['아보카도',160,100,'g',2,9,15],
- ['김치찌개',330,1,'인분',22,18,18],['된장찌개',170,1,'인분',12,18,7],['비빔밥',560,1,'인분',19,88,15],['김밥',480,1,'줄',15,75,14],['닭가슴살 포케',520,1,'인분',38,62,14],['샌드위치',420,1,'개',22,48,15]
-].map((x,i)=>({id:'food-'+i,name:x[0],kcal:x[1],serving:x[2],unit:x[3],protein:x[4],carbs:x[5],fat:x[6]}));
+ ['흰쌀밥',210,150,'g',4,46,0.5,'쌀밥 밥 rice white rice'],['현미밥',218,150,'g',4.5,45,2,'brown rice'],['잡곡밥',225,150,'g',5,46,2,'multigrain rice'],['곤약밥',95,150,'g',2,21,0.3,'저칼로리밥 konjac rice'],['고구마',129,150,'g',2,30,0.2,'sweet potato'],['감자',116,150,'g',3,26,0.2,'potato'],['오트밀',190,50,'g',6.5,34,3.5,'오트 oats oatmeal'],['그래놀라',220,50,'g',5,32,8,'granola'],['통밀빵',150,2,'장',6,28,2,'whole wheat bread'],['식빵',160,2,'장',5,30,2,'toast bread'],
+ ['플레인 베이글',270,1,'개',10,54,2,'베이글 bagel plain bagel'],['통밀 베이글',250,1,'개',11,48,3,'베이글 whole wheat bagel'],['블루베리 베이글',285,1,'개',9,58,2.5,'베이글 blueberry bagel'],['어니언 베이글',280,1,'개',10,56,2.5,'베이글 onion bagel'],['크림치즈',100,30,'g',2,2,10,'cream cheese'],['잉글리시 머핀',135,1,'개',5,26,1,'english muffin'],
+ ['닭가슴살',165,100,'g',31,0,3.6,'chicken breast'],['닭다리살',190,100,'g',24,0,10,'chicken thigh'],['닭가슴살 소시지',140,100,'g',18,8,4,'chicken sausage'],['소고기 우둔살',170,100,'g',27,0,7,'lean beef'],['돼지 안심',143,100,'g',26,0,4,'pork tenderloin'],['연어',208,100,'g',20,0,13,'salmon'],['흰살생선',120,100,'g',24,0,2,'white fish'],['참치캔(물)',116,100,'g',26,0,1,'참치 tuna canned tuna'],['새우',99,100,'g',24,0.2,0.3,'shrimp'],
+ ['삶은 달걀',70,1,'개',6,0.5,5,'계란 egg boiled egg'],['달걀 프라이',90,1,'개',6,0.5,7,'계란 후라이 fried egg'],['두부',80,100,'g',8,2,5,'tofu'],['그릭요거트',120,150,'g',15,8,3,'그릭 요거트 greek yogurt'],['플레인 요거트',95,150,'g',6,11,3,'yogurt'],['우유',125,200,'ml',6.5,10,7,'milk'],['저지방 우유',90,200,'ml',7,10,2,'low fat milk'],['무가당 두유',95,190,'ml',7,4,5,'soy milk'],
+ ['프로틴 쉐이크(물)',130,1,'회',25,4,2,'프로틴쉐이크 단백질쉐이크 단백질 쉐이크 protein shake whey shake'],['프로틴 쉐이크(우유)',230,1,'회',31,14,8,'프로틴쉐이크 단백질쉐이크 milk protein shake'],['프로틴 음료',150,1,'병',25,8,2,'단백질 음료 protein drink'],['초코 쉐이크',380,1,'잔',10,58,12,'초코쉐이크 chocolate shake milkshake'],['바닐라 쉐이크',360,1,'잔',9,55,12,'바닐라쉐이크 vanilla shake milkshake'],['딸기 쉐이크',350,1,'잔',9,56,10,'딸기쉐이크 strawberry shake'],['식사대용 쉐이크',210,1,'회',20,25,5,'meal replacement shake'],
+ ['바나나',105,1,'개',1.3,27,0.4,'banana'],['사과',95,1,'개',0.5,25,0.3,'apple'],['오렌지',62,1,'개',1.2,15,0.2,'orange'],['키위',46,1,'개',0.8,11,0.4,'kiwi'],['딸기',32,100,'g',0.7,8,0.3,'strawberry'],['블루베리',57,100,'g',0.7,14,0.3,'blueberry'],['포도',69,100,'g',0.7,18,0.2,'grape'],['수박',46,150,'g',0.9,11,0.2,'watermelon'],
+ ['아몬드',116,20,'g',4,4,10,'almond'],['호두',131,20,'g',3,3,13,'walnut'],['땅콩버터',118,20,'g',5,4,10,'peanut butter'],['샐러드 채소',35,150,'g',2,7,0.4,'salad vegetables'],['아보카도',160,100,'g',2,9,15,'avocado'],['방울토마토',27,150,'g',1.3,6,0.3,'cherry tomato'],
+ ['김치찌개',330,1,'인분',22,18,18,'kimchi stew'],['된장찌개',170,1,'인분',12,18,7,'soybean paste stew'],['순두부찌개',250,1,'인분',18,14,14,'soft tofu stew'],['비빔밥',560,1,'인분',19,88,15,'bibimbap'],['김밥',480,1,'줄',15,75,14,'gimbap kimbap'],['불고기',320,1,'인분',27,20,15,'bulgogi'],['제육볶음',420,1,'인분',30,24,23,'spicy pork'],['떡볶이',430,1,'인분',8,82,8,'tteokbokki'],['라면',500,1,'봉',10,80,16,'ramyeon ramen'],
+ ['닭가슴살 포케',520,1,'인분',38,62,14,'포케 poke chicken poke'],['연어 포케',560,1,'인분',32,64,20,'포케 salmon poke'],['샌드위치',420,1,'개',22,48,15,'sandwich'],['닭가슴살 샌드위치',390,1,'개',30,43,11,'chicken sandwich'],['에그 샌드위치',410,1,'개',18,42,18,'egg sandwich'],['햄치즈 샌드위치',450,1,'개',22,40,22,'ham cheese sandwich'],['치킨 샐러드',330,1,'인분',32,20,14,'chicken salad'],['시저 샐러드',420,1,'인분',24,24,25,'caesar salad'],
+ ['아메리카노',10,1,'잔',0.3,2,0,'커피 coffee americano'],['카페라떼',180,1,'잔',9,18,8,'라떼 latte cafe latte'],['콜드브루',10,1,'잔',0.3,2,0,'cold brew'],['카푸치노',140,1,'잔',7,13,7,'cappuccino'],['바닐라 라떼',260,1,'잔',8,38,8,'vanilla latte'],['녹차',0,1,'잔',0,0,0,'green tea'],['이온음료',120,500,'ml',0,30,0,'sports drink electrolyte'],
+ ['닭가슴살 도시락',430,1,'개',35,48,10,'chicken lunchbox'],['현미 닭가슴살 도시락',450,1,'개',38,50,10,'brown rice chicken lunchbox'],['단백질바',210,1,'개',20,22,7,'프로틴바 protein bar'],['에너지바',230,1,'개',6,35,8,'energy bar'],['쌀과자',120,30,'g',2,25,1,'rice snack'],['크루아상',270,1,'개',5,31,14,'croissant'],['머핀',360,1,'개',6,52,14,'muffin'],['도넛',300,1,'개',4,36,16,'donut']
+].map((x,i)=>({id:'food-'+i,name:x[0],kcal:x[1],serving:x[2],unit:x[3],protein:x[4],carbs:x[5],fat:x[6],aliases:x[7]||''}));
+const FOOD_RECENT_KEY='eldyn-food-recents';
+const FOOD_FAVORITE_KEY='eldyn-food-favorites';
+function normaliseFoodQuery(v=''){return String(v).toLowerCase().replace(/[\s._-]+/g,'').replace(/[()]/g,'')}
+function foodSearchText(x){return normaliseFoodQuery(`${x.name} ${x.aliases||''}`)}
+function readFoodList(key){try{return JSON.parse(localStorage.getItem(key)||'[]')}catch{return[]}}
+function writeFoodList(key,list){localStorage.setItem(key,JSON.stringify([...new Set(list)].slice(0,20)))}
+function rememberFood(id){const list=readFoodList(FOOD_RECENT_KEY).filter(x=>x!==id);writeFoodList(FOOD_RECENT_KEY,[id,...list])}
+function toggleFoodFavorite(id){const list=readFoodList(FOOD_FAVORITE_KEY);writeFoodList(FOOD_FAVORITE_KEY,list.includes(id)?list.filter(x=>x!==id):[id,...list]);renderFoodResults()}
 let editingMealIndex=null,selectedFood=null;
+
 function mealFoodTotals(meal){return (meal.foodItems||[]).reduce((a,x)=>({kcal:a.kcal+(+x.kcal||0),protein:a.protein+(+x.protein||0),carbs:a.carbs+(+x.carbs||0),fat:a.fat+(+x.fat||0)}),{kcal:0,protein:0,carbs:0,fat:0})}
 function dailyFoodTotals(meals){return meals.reduce((a,m)=>{const t=mealFoodTotals(m);return{kcal:a.kcal+t.kcal,protein:a.protein+t.protein,carbs:a.carbs+t.carbs,fat:a.fat+t.fat}},{kcal:0,protein:0,carbs:0,fat:0})}
 function roundMacro(n){return Math.round((+n||0)*10)/10}
 function syncFoodTotals(log,meals){const t=dailyFoodTotals(meals);if(t.kcal>0){log.calories=Math.round(t.kcal);log.protein=Math.round(t.protein);log.carbs=Math.round(t.carbs);log.fat=Math.round(t.fat)}return t}
-function ensureFoodDialog(){if(document.getElementById('foodDialog'))return;document.body.insertAdjacentHTML('beforeend',`<dialog id="foodDialog" class="modal food-modal"><button class="close-btn" id="foodDialogClose">×</button><p class="eyebrow">MEAL LOGGER</p><h2 id="foodDialogTitle">음식 검색 및 합계</h2><div class="food-search-row"><input id="foodSearch" placeholder="음식명 검색 (예: 닭가슴살, 비빔밥)"><button class="secondary-btn inline-btn" id="customFoodBtn">직접 영양 입력</button></div><div id="foodResults" class="food-results"></div><div id="foodServingPanel" class="food-serving" hidden><h3 id="selectedFoodName"></h3><div class="form-row"><label>섭취량<input id="foodAmount" type="number" min="0" step="0.1"></label><label>단위<input id="foodUnit" readonly></label></div><p id="foodPreview" class="muted"></p><button class="primary-btn" id="addFoodBtn">이 음식 추가</button></div><div class="section-head"><h2>현재 식사</h2></div><div id="mealFoodList" class="meal-food-list"></div><div id="mealFoodTotal" class="meal-total"></div><button class="primary-btn" id="saveMealFoodsBtn">식단 저장</button></dialog>`);
+function ensureFoodDialog(){if(document.getElementById('foodDialog'))return;document.body.insertAdjacentHTML('beforeend',`<dialog id="foodDialog" class="modal food-modal"><button class="close-btn" id="foodDialogClose">×</button><p class="eyebrow">MEAL LOGGER</p><h2 id="foodDialogTitle">음식 검색 및 합계</h2><div class="food-search-row"><input id="foodSearch" placeholder="음식명 검색 (예: 베이글, 프로틴 쉐이크)"><button class="secondary-btn inline-btn" id="customFoodBtn">직접 영양 입력</button></div><div id="foodResults" class="food-results"></div><div id="foodServingPanel" class="food-serving" hidden><h3 id="selectedFoodName"></h3><div class="form-row"><label>섭취량<input id="foodAmount" type="number" min="0" step="0.1"></label><label>단위<input id="foodUnit" readonly></label></div><p id="foodPreview" class="muted"></p><button class="primary-btn" id="addFoodBtn">이 음식 추가</button></div><div class="section-head"><h2>현재 식사</h2></div><div id="mealFoodList" class="meal-food-list"></div><div id="mealFoodTotal" class="meal-total"></div><button class="primary-btn" id="saveMealFoodsBtn">식단 저장</button></dialog>`);
  foodDialogClose.onclick=()=>foodDialog.close();foodSearch.oninput=renderFoodResults;customFoodBtn.onclick=openCustomFoodPrompt;foodAmount.oninput=renderFoodPreview;addFoodBtn.onclick=addSelectedFood;saveMealFoodsBtn.onclick=saveMealFoods;
 }
 function openFoodEditor(index){ensureFoodDialog();editingMealIndex=index;selectedFood=null;foodSearch.value='';foodServingPanel.hidden=true;foodDialogTitle.textContent=ensureMeals(getLog(activeDate),activeDate)[index].name+' 음식 기록';renderFoodResults();renderMealFoodList();foodDialog.showModal()}
-function renderFoodResults(){const q=(foodSearch?.value||'').trim().toLowerCase();const list=FOOD_DB.filter(x=>!q||x.name.toLowerCase().includes(q)).slice(0,12);foodResults.innerHTML=list.map(x=>`<button class="food-result" data-food-id="${x.id}"><b>${x.name}</b><span>${x.kcal} kcal / ${x.serving}${x.unit}</span></button>`).join('')||'<p class="muted">검색 결과가 없습니다. 직접 영양 입력을 사용하세요.</p>';foodResults.querySelectorAll('[data-food-id]').forEach(b=>b.onclick=()=>selectFood(b.dataset.foodId))}
+function renderFoodResults(){const q=normaliseFoodQuery(foodSearch?.value||''),fav=readFoodList(FOOD_FAVORITE_KEY),recent=readFoodList(FOOD_RECENT_KEY);let list;if(q){list=FOOD_DB.filter(x=>foodSearchText(x).includes(q)).sort((a,b)=>{const an=normaliseFoodQuery(a.name),bn=normaliseFoodQuery(b.name);return Number(bn.startsWith(q))-Number(an.startsWith(q))||Number(fav.includes(b.id))-Number(fav.includes(a.id))||a.name.localeCompare(b.name,'ko')})}else{const ordered=[...fav,...recent];list=[...ordered.map(id=>FOOD_DB.find(x=>x.id===id)).filter(Boolean),...FOOD_DB].filter((x,i,a)=>a.findIndex(y=>y.id===x.id)===i)}list=list.slice(0,20);foodResults.innerHTML=list.map(x=>`<div class="food-result-row"><button class="food-result" data-food-id="${x.id}"><b>${x.name}</b><span>${x.kcal} kcal / ${x.serving}${x.unit}</span></button><button class="food-favorite ${fav.includes(x.id)?'active':''}" data-food-favorite="${x.id}" aria-label="즐겨찾기">${fav.includes(x.id)?'★':'☆'}</button></div>`).join('')||'<p class="muted">검색 결과가 없습니다. 직접 영양 입력으로 추가해 주세요.</p>';foodResults.querySelectorAll('[data-food-id]').forEach(b=>b.onclick=()=>selectFood(b.dataset.foodId));foodResults.querySelectorAll('[data-food-favorite]').forEach(b=>b.onclick=e=>{e.stopPropagation();toggleFoodFavorite(b.dataset.foodFavorite)})}
 function selectFood(id){selectedFood=FOOD_DB.find(x=>x.id===id);if(!selectedFood)return;selectedFoodName.textContent=selectedFood.name;foodAmount.value=selectedFood.serving;foodUnit.value=selectedFood.unit;foodServingPanel.hidden=false;renderFoodPreview()}
 function renderFoodPreview(){if(!selectedFood)return;const ratio=(+foodAmount.value||0)/selectedFood.serving;foodPreview.textContent=`약 ${Math.round(selectedFood.kcal*ratio)} kcal · P ${roundMacro(selectedFood.protein*ratio)}g · C ${roundMacro(selectedFood.carbs*ratio)}g · F ${roundMacro(selectedFood.fat*ratio)}g`}
-function addSelectedFood(){if(!selectedFood||(+foodAmount.value||0)<=0)return;const amount=+foodAmount.value,ratio=amount/selectedFood.serving,m=ensureMeals(getLog(activeDate),activeDate)[editingMealIndex];m.foodItems=m.foodItems||[];m.foodItems.push({name:selectedFood.name,amount,unit:selectedFood.unit,kcal:Math.round(selectedFood.kcal*ratio),protein:roundMacro(selectedFood.protein*ratio),carbs:roundMacro(selectedFood.carbs*ratio),fat:roundMacro(selectedFood.fat*ratio)});renderMealFoodList();selectedFood=null;foodServingPanel.hidden=true}
+function addSelectedFood(){if(!selectedFood||(+foodAmount.value||0)<=0)return;rememberFood(selectedFood.id);const amount=+foodAmount.value,ratio=amount/selectedFood.serving,m=ensureMeals(getLog(activeDate),activeDate)[editingMealIndex];m.foodItems=m.foodItems||[];m.foodItems.push({name:selectedFood.name,amount,unit:selectedFood.unit,kcal:Math.round(selectedFood.kcal*ratio),protein:roundMacro(selectedFood.protein*ratio),carbs:roundMacro(selectedFood.carbs*ratio),fat:roundMacro(selectedFood.fat*ratio)});renderMealFoodList();selectedFood=null;foodServingPanel.hidden=true}
 function openCustomFoodPrompt(){const name=prompt('음식명을 입력하세요.');if(!name)return;const kcal=+prompt('총 칼로리(kcal)를 입력하세요.','0')||0,protein=+prompt('단백질(g)을 입력하세요.','0')||0,carbs=+prompt('탄수화물(g)을 입력하세요.','0')||0,fat=+prompt('지방(g)을 입력하세요.','0')||0,m=ensureMeals(getLog(activeDate),activeDate)[editingMealIndex];m.foodItems=m.foodItems||[];m.foodItems.push({name,amount:1,unit:'회',kcal,protein,carbs,fat});renderMealFoodList()}
 function renderMealFoodList(){const m=ensureMeals(getLog(activeDate),activeDate)[editingMealIndex],items=m.foodItems||[];mealFoodList.innerHTML=items.map((x,i)=>`<div class="meal-food-row"><div><b>${escapeHtml(x.name)}</b><small>${x.amount}${escapeHtml(x.unit)} · ${x.kcal} kcal · P ${x.protein}g</small></div><button class="mini-edit" data-remove-food="${i}">삭제</button></div>`).join('')||'<p class="muted">아직 추가한 음식이 없습니다.</p>';mealFoodList.querySelectorAll('[data-remove-food]').forEach(b=>b.onclick=()=>{items.splice(+b.dataset.removeFood,1);renderMealFoodList()});const t=mealFoodTotals(m);mealFoodTotal.innerHTML=`<strong>${Math.round(t.kcal)} kcal</strong><span>P ${roundMacro(t.protein)}g · C ${roundMacro(t.carbs)}g · F ${roundMacro(t.fat)}g</span>`}
 function saveMealFoods(){const l=getLog(activeDate),meals=ensureMeals(l,activeDate),m=meals[editingMealIndex];if((m.foodItems||[]).length){m.customText=m.foodItems.map(x=>x.name).join(' · ')}else delete m.customText;syncFoodTotals(l,meals);l.updatedAt=new Date().toISOString();saveState();foodDialog.close();render()}
 
 function calculateNutrition(){const s=state.settings,w=+s.currentWeight||78,h=+s.height||160,age=+s.age||37,sex=s.sex||'female',act=+s.activity||1.55;let bmr=10*w+6.25*h-5*age+(sex==='male'?5:-161),tdee=bmr*act,delta={loss:-500,fatloss:-400,maintain:0,gain:250,hyrox:-150,manual:0}[s.goalMode]??-400;let kcal=s.goalMode==='manual'?(+s.calorieGoal||1800):Math.round((tdee+delta)/50)*50;const floor=sex==='male'?1500:1200;kcal=Math.max(floor,kcal);let protein=Math.round(w*({loss:1.5,fatloss:1.7,maintain:1.5,gain:1.8,hyrox:1.7,manual:(+s.proteinGoal||120)/w}[s.goalMode]||1.6));if(s.goalMode==='manual')protein=+s.proteinGoal||120;let fat=Math.round(w*.7),carb=Math.max(80,Math.round((kcal-protein*4-fat*9)/4));return{bmr:Math.round(bmr),tdee:Math.round(tdee),kcal,protein,carb,fat,water:Math.round(w*30/250)*250}}
 function ensureMeals(log,date){if(!log.mealPlan||!Array.isArray(log.mealPlan)){const count=+state.settings.mealCount||4,keys=count===3?['breakfast','lunch','dinner']:['breakfast','lunch','snack','dinner'];log.mealPlan=keys.map((key,i)=>({key,name:{breakfast:'Breakfast',lunch:'Lunch',snack:'Snack',dinner:'Dinner'}[key],choice:i%mealChoices[key].length,done:false}));log.updatedAt=new Date().toISOString()}return log.mealPlan}
-function renderMeals(log){const t=calculateNutrition(),meals=ensureMeals(log,activeDate),eaten=syncFoodTotals(log,meals);nutritionTargetCard.innerHTML=`<div><p class="eyebrow">DAILY NUTRITION</p><h3>${Math.round(eaten.kcal).toLocaleString()} / ${t.kcal.toLocaleString()} kcal</h3><p class="muted">섭취 P ${roundMacro(eaten.protein)}g · C ${roundMacro(eaten.carbs)}g · F ${roundMacro(eaten.fat)}g</p><p class="muted">목표 P ${t.protein}g · C ${t.carb}g · F ${t.fat}g · Water ${t.water.toLocaleString()}ml</p></div><span class="goal-pill">${escapeHtml(state.settings.goalMode)}</span>`;mealPlanList.innerHTML=meals.map((m,i)=>{const mt=mealFoodTotals(m),text=m.customText||mealChoices[m.key][m.choice%mealChoices[m.key].length],summary=mt.kcal>0?`${Math.round(mt.kcal)} kcal · P ${roundMacro(mt.protein)}g · C ${roundMacro(mt.carbs)}g · F ${roundMacro(mt.fat)}g`:(m.customText?'직접 입력한 식단':Math.round(t.kcal/meals.length)+' kcal guideline');return `<article class="meal-plan-card ${m.done?'done':''}"><button class="meal-check" data-meal-done="${i}" aria-label="Complete meal">${m.done?'✓':'○'}</button><div><p class="eyebrow">${m.name.toUpperCase()}</p><h3>${escapeHtml(text)}</h3><small>${summary}</small></div><div class="meal-actions"><button class="mini-edit" data-meal-food="${i}">음식 검색·합계</button><button class="mini-edit" data-meal-edit="${i}">메모 입력</button><button class="mini-edit" data-meal-change="${i}">추천 변경</button></div></article>`}).join('')}
+function renderMeals(log){const t=calculateNutrition(),meals=ensureMeals(log,activeDate),eaten=syncFoodTotals(log,meals);nutritionTargetCard.innerHTML=`<div><p class="eyebrow">DAILY NUTRITION</p><h3>${Math.round(eaten.kcal).toLocaleString()} / ${t.kcal.toLocaleString()} kcal</h3><p class="muted">섭취 P ${roundMacro(eaten.protein)}g · C ${roundMacro(eaten.carbs)}g · F ${roundMacro(eaten.fat)}g</p><p class="muted">목표 P ${t.protein}g · C ${t.carb}g · F ${t.fat}g · Water ${t.water.toLocaleString()}ml</p></div><span class="goal-pill">${escapeHtml(state.settings.goalMode)}</span>`;mealPlanList.innerHTML=meals.map((m,i)=>{const mt=mealFoodTotals(m),text=m.customText||mealChoices[m.key][m.choice%mealChoices[m.key].length],summary=mt.kcal>0?`${Math.round(mt.kcal)} kcal · P ${roundMacro(mt.protein)}g · C ${roundMacro(mt.carbs)}g · F ${roundMacro(mt.fat)}g`:(m.customText?'직접 입력한 식단':Math.round(t.kcal/meals.length)+' kcal guideline');return `<article class="meal-plan-card ${m.done?'done':''}"><button class="meal-check" data-meal-done="${i}" aria-label="Complete meal">${m.done?'✓':'○'}</button><div><p class="eyebrow">${m.name.toUpperCase()}</p><h3>${escapeHtml(text)}</h3><small>${summary}</small></div><div class="meal-actions"><button class="mini-edit" data-meal-scan="${i}">📷 AI 사진</button><button class="mini-edit" data-meal-food="${i}">음식 검색·합계</button><button class="mini-edit" data-meal-edit="${i}">메모 입력</button><button class="mini-edit" data-meal-change="${i}">추천 변경</button></div></article>`}).join('')}
 function updateGreeting(){const h=new Date().getHours(),part=h<12?'morning':h<18?'afternoon':'evening';greeting.textContent=`Good ${part}, ${state.settings.name||'Ellen'}.`}
 function render(){updateGreeting();renderToday();renderPlan();renderCalendar();renderProgress();renderSettings()}
 function renderPlan(){
@@ -83,7 +98,7 @@ function openExercise(i){const x=getLog().exercises[i],id=extractYoutubeId(x.you
 function openExerciseForm(i=null){editingIndex=i;const form=addExerciseForm;form.reset();if(i===null){exerciseFormEyebrow.textContent='NEW EXERCISE';exerciseFormTitle.textContent=`Add to ${activeDate}`;exerciseFormSubmit.textContent='Add exercise';form.sets.value=3;form.reps.value=10;form.weight.value=0}else{const x=getLog().exercises[i];exerciseFormEyebrow.textContent='EDIT EXERCISE';exerciseFormTitle.textContent=x.name;exerciseFormSubmit.textContent='Save changes';for(const k of ['name','sets','reps','weight','target','instructions','youtube'])if(form.elements[k])form.elements[k].value=x[k]??''}addExerciseDialog.showModal()}
 function extractYoutubeId(v=''){if(/^[\w-]{11}$/.test(v))return v;try{const u=new URL(v);if(u.hostname.includes('youtu.be'))return u.pathname.slice(1,12);if(u.searchParams.get('v'))return u.searchParams.get('v').slice(0,11);return u.pathname.match(/\/embed\/([\w-]{11})/)?.[1]||''}catch{return''}}
 function escapeHtml(s=''){return String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]))}
-function switchView(id){document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===id));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id))}
+function switchView(id){document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===id));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));if(id==='run')renderRun()}
 priorityGrid.onclick=e=>{const b=e.target.closest('[data-priority]');if(!b)return;const l=getLog(),k=b.dataset.priority;if(k==='workout')l.exercises.forEach(x=>x.done=!l.priorities.workout);else l.priorities[k]=!l.priorities[k];saveState();render()};
 workoutList.onclick=e=>{const edit=e.target.closest('[data-ex-edit]'),open=e.target.closest('[data-ex-open]');if(edit)openExerciseForm(+edit.dataset.exEdit);else if(open)openExercise(+open.dataset.exOpen);else if(e.target.closest('[data-empty-add]'))openExerciseForm()};workoutList.onchange=e=>{if(e.target.matches('[data-ex-check]')){getLog().exercises[+e.target.dataset.exCheck].done=e.target.checked;updateLog({exercises:getLog().exercises})}};
 [['waterInput','water'],['sleepInput','sleep'],['calorieInput','calories'],['proteinInput','protein']].forEach(([id,k])=>document.getElementById(id).addEventListener('change',e=>updateLog({[k]:+e.target.value||0})));memoInput.addEventListener('change',e=>updateLog({memo:e.target.value}));
@@ -94,10 +109,266 @@ function saveProfileFromForm(){Object.assign(state.settings,{name:displayName.va
 saveProfileBtn.onclick=()=>{saveProfileFromForm();alert('Profile saved.')}
 autoNutritionBtn.onclick=()=>{saveProfileFromForm();const t=calculateNutrition();Object.assign(state.settings,{calorieGoal:t.kcal,proteinGoal:t.protein,carbGoal:t.carb,fatGoal:t.fat,waterGoal:t.water});delete getLog(activeDate).mealPlan;saveState();render();alert('Nutrition targets and today\'s meal plan were created.')}
 regenerateMealsBtn.onclick=()=>{delete getLog(activeDate).mealPlan;saveState();renderMeals(getLog(activeDate))};
-mealPlanList.onclick=e=>{const c=e.target.closest('[data-meal-change]'),d=e.target.closest('[data-meal-done]'),edit=e.target.closest('[data-meal-edit]'),food=e.target.closest('[data-meal-food]'),l=getLog(activeDate),meals=ensureMeals(l,activeDate);if(food){openFoodEditor(+food.dataset.mealFood);return}else if(edit){const m=meals[+edit.dataset.mealEdit],current=m.customText||mealChoices[m.key][m.choice%mealChoices[m.key].length],value=prompt(`${m.name} 식단 메모를 입력하세요.`,current);if(value===null)return;m.customText=value.trim();if(!m.customText)delete m.customText}else if(c){const m=meals[+c.dataset.mealChange];delete m.customText;m.foodItems=[];m.choice=(m.choice+1)%mealChoices[m.key].length}else if(d){meals[+d.dataset.mealDone].done=!meals[+d.dataset.mealDone].done}else return;syncFoodTotals(l,meals);l.priorities.nutrition=meals.every(x=>x.done);saveState();render()}
-saveSettingsBtn.onclick=()=>{Object.assign(state.settings,{waterGoal:+waterGoal.value||2000,sleepGoal:+sleepGoal.value||7.5,proteinGoal:+proteinGoal.value||120,calorieGoal:+calorieGoal.value||1800});saveState();render();alert('Targets saved.')};saveBodyBtn.onclick=()=>{state.body=state.body.filter(x=>x.date!==todayKey());state.body.push({date:todayKey(),weight:+weightInput.value||null,bodyFat:+bodyFatInput.value||null,waist:+waistInput.value||null,muscle:+muscleInput.value||null});saveState();alert('Body record saved.')};exportBtn.onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ellens-project-backup-${todayKey()}.json`;a.click();URL.revokeObjectURL(a.href)};importInput.onchange=async e=>{try{state={...clone(defaults),...JSON.parse(await e.target.files[0].text())};saveState();render();alert('Backup imported.')}catch{alert('That backup file could not be read.')}};celebrationClose.onclick=()=>celebrationDialog.close();profileBtn.onclick=()=>accountDialog.showModal();
+mealPlanList.onclick=e=>{const c=e.target.closest('[data-meal-change]'),d=e.target.closest('[data-meal-done]'),edit=e.target.closest('[data-meal-edit]'),food=e.target.closest('[data-meal-food]'),scan=e.target.closest('[data-meal-scan]'),l=getLog(activeDate),meals=ensureMeals(l,activeDate);if(scan){openFoodScan(+scan.dataset.mealScan);return}else if(food){openFoodEditor(+food.dataset.mealFood);return}else if(edit){const m=meals[+edit.dataset.mealEdit],current=m.customText||mealChoices[m.key][m.choice%mealChoices[m.key].length],value=prompt(`${m.name} 식단 메모를 입력하세요.`,current);if(value===null)return;m.customText=value.trim();if(!m.customText)delete m.customText}else if(c){const m=meals[+c.dataset.mealChange];delete m.customText;m.foodItems=[];m.choice=(m.choice+1)%mealChoices[m.key].length}else if(d){meals[+d.dataset.mealDone].done=!meals[+d.dataset.mealDone].done}else return;syncFoodTotals(l,meals);l.priorities.nutrition=meals.every(x=>x.done);saveState();render()}
+saveSettingsBtn.onclick=()=>{Object.assign(state.settings,{waterGoal:+waterGoal.value||2000,sleepGoal:+sleepGoal.value||7.5,proteinGoal:+proteinGoal.value||120,calorieGoal:+calorieGoal.value||1800});saveState();render();alert('Targets saved.')};saveBodyBtn.onclick=()=>{state.body=state.body.filter(x=>x.date!==todayKey());state.body.push({date:todayKey(),weight:+weightInput.value||null,bodyFat:+bodyFatInput.value||null,waist:+waistInput.value||null,muscle:+muscleInput.value||null});saveState();alert('Body record saved.')};exportBtn.onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`eldyn-backup-${todayKey()}.json`;a.click();URL.revokeObjectURL(a.href)};importInput.onchange=async e=>{try{state={...clone(defaults),...JSON.parse(await e.target.files[0].text())};saveState();render();alert('Backup imported.')}catch{alert('That backup file could not be read.')}};celebrationClose.onclick=()=>celebrationDialog.close();profileBtn.onclick=()=>accountDialog.showModal();
 async function initSupabase(){const c=window.ELLEN_CONFIG||{},badge=document.getElementById('connectionBadge');if(!c.SUPABASE_URL||!c.SUPABASE_ANON_KEY){syncNowBtn.disabled=true;syncStatus.textContent='Supabase configuration is missing.';return}if(!window.supabase){syncStatus.textContent='Internet connection required.';return}try{supabaseClient=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const{data,error}=await supabaseClient.auth.getSession();if(error)throw error;setUser(data.session?.user||null);supabaseClient.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null))}catch(e){syncStatus.textContent='Cloud connection failed: '+e.message}}
 function setUser(user){currentUser=user;authTitle.textContent=user?user.email:'Cloud ready';syncStatus.textContent=user?'Synced just now.':'Supabase is connected. Create an account or sign in.';authFields.hidden=!!user;signOutBtn.hidden=!user;syncNowBtn.disabled=!user;if(user)cloudPull()}
 signInBtn.onclick=()=>authAction('signin');signUpBtn.onclick=()=>authAction('signup');signOutBtn.onclick=async()=>{await supabaseClient?.auth.signOut();setUser(null)};syncNowBtn.onclick=()=>cloudSync(true);async function authAction(mode){if(!supabaseClient)return alert('Cloud connection is not ready.');const email=emailInput.value.trim(),password=passwordInput.value;if(!email||password.length<6)return alert('Enter an email and a password with at least 6 characters.');const fn=mode==='signup'?'signUp':'signInWithPassword',r=await supabaseClient.auth[fn]({email,password});if(r.error)alert(r.error.message);else alert(mode==='signup'?'Account created. You can sign in now if email confirmation is disabled.':'Signed in. Cloud sync is active.')}
 let syncTimer;function scheduleCloudSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>cloudSync(false),800)}async function cloudSync(show=false){if(!supabaseClient||!currentUser)return;syncStatus.textContent='Syncing…';const rows=Object.entries(state.logs).map(([date,payload])=>({user_id:currentUser.id,date,payload,updated_at:payload.updatedAt||new Date().toISOString()})),{error}=rows.length?await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}):{error:null};syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(show)alert(error?error.message:'Sync complete.')}async function cloudPull(){if(!supabaseClient||!currentUser)return;const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);if(error){syncStatus.textContent='Could not load cloud data.';return}for(const row of data||[]){const local=state.logs[row.date];if(!local||new Date(row.updated_at)>new Date(local.updatedAt||0))state.logs[row.date]=row.payload}localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render();syncStatus.textContent='Cloud data loaded.'}
-window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;installBtn.hidden=false});installBtn.onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;installBtn.hidden=true}};if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));initSupabase();render();
+
+
+// ELDYN live running + privacy + share card
+const runEls={
+  title:document.getElementById('runStatusTitle'),note:document.getElementById('runStatusNote'),gps:document.getElementById('gpsBadge'),
+  time:document.getElementById('runTime'),distance:document.getElementById('runDistance'),currentPace:document.getElementById('runCurrentPace'),
+  averagePace:document.getElementById('runAveragePace'),calories:document.getElementById('runCalories'),accuracy:document.getElementById('runAccuracy'),
+  splits:document.getElementById('runSplits'),history:document.getElementById('runHistory'),start:document.getElementById('startRunBtn'),
+  pause:document.getElementById('pauseRunBtn'),finish:document.getElementById('finishRunBtn'),gpsToggle:document.getElementById('gpsEnabledToggle'),
+  autoPause:document.getElementById('autoPauseToggle'),movingTime:document.getElementById('runMovingTime'),topSpeed:document.getElementById('runTopSpeed'),
+  quality:document.getElementById('gpsQuality'),routeCanvas:document.getElementById('liveRouteCanvas')
+};
+const shareEls={
+  dialog:document.getElementById('shareRunDialog'),photo:document.getElementById('sharePhotoInput'),ratio:document.getElementById('shareRatioSelect'),
+  caption:document.getElementById('shareCaptionInput'),canvas:document.getElementById('shareCanvas'),render:document.getElementById('renderShareBtn'),
+  download:document.getElementById('downloadShareBtn'),nativeShare:document.getElementById('nativeShareBtn')
+};
+let shareRunRecord=null,sharePhotoImage=null;
+const ACTIVE_RUN_KEY='eldyn-active-run-v4';
+function saveActiveRun(){if(!runSession){localStorage.removeItem(ACTIVE_RUN_KEY);return}const snap={...runSession,savedAt:Date.now()};localStorage.setItem(ACTIVE_RUN_KEY,JSON.stringify(snap))}
+function restoreActiveRun(){try{const r=JSON.parse(localStorage.getItem(ACTIVE_RUN_KEY)||'null');if(!r||Date.now()-(r.savedAt||0)>12*3600e3)return localStorage.removeItem(ACTIVE_RUN_KEY);runSession=r;if(r.status==='running'){runSession.elapsedBefore=(r.elapsedBefore||0)+Math.max(0,Date.now()-(r.segmentStartedAt||Date.now()));runSession.segmentStartedAt=Date.now();runSession.lastPoint=null;runSession.status='paused';runSession.autoPaused=false}runEls.gpsToggle.checked=!!runSession.gpsEnabled;runEls.autoPause.checked=runSession.autoPauseEnabled!==false;runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000)}catch{localStorage.removeItem(ACTIVE_RUN_KEY)}}
+function gpsQualityLabel(acc){if(!Number.isFinite(acc))return 'WAITING';if(acc<=10)return 'EXCELLENT';if(acc<=25)return 'GOOD';if(acc<=50)return 'FAIR';return 'LOW'}
+function drawLiveRoute(){const c=runEls.routeCanvas;if(!c)return;const ctx=c.getContext('2d'),w=c.width,h=c.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#0b0d0c';ctx.fillRect(0,0,w,h);ctx.strokeStyle='rgba(255,255,255,.055)';ctx.lineWidth=1;for(let x=0;x<w;x+=90){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}for(let y=0;y<h;y+=72){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}const pts=runSession?.route||[];if(pts.length<2){ctx.fillStyle='rgba(255,255,255,.5)';ctx.font='700 28px system-ui';ctx.textAlign='center';ctx.fillText(runSession?.gpsEnabled===false?'PRIVATE RUN · GPS OFF':'ROUTE APPEARS AFTER GPS LOCK',w/2,h/2);return}const lats=pts.map(p=>p.lat),lons=pts.map(p=>p.lon),minLat=Math.min(...lats),maxLat=Math.max(...lats),minLon=Math.min(...lons),maxLon=Math.max(...lons),pad=38,dx=Math.max(maxLon-minLon,.00001),dy=Math.max(maxLat-minLat,.00001);const xy=p=>[pad+(p.lon-minLon)/dx*(w-pad*2),h-pad-(p.lat-minLat)/dy*(h-pad*2)];ctx.strokeStyle='#b9ff3f';ctx.lineWidth=8;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();pts.forEach((p,i)=>{const [x,y]=xy(p);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();const [sx,sy]=xy(pts[0]),[ex,ey]=xy(pts.at(-1));ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(sx,sy,10,0,Math.PI*2);ctx.fill();ctx.fillStyle='#b9ff3f';ctx.beginPath();ctx.arc(ex,ey,12,0,Math.PI*2);ctx.fill()}
+
+function haversine(a,b){const R=6371000,toRad=x=>x*Math.PI/180,dLat=toRad(b.lat-a.lat),dLon=toRad(b.lon-a.lon),la1=toRad(a.lat),la2=toRad(b.lat);const q=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(q))}
+function elapsedMs(){if(!runSession)return 0;return runSession.elapsedBefore+(runSession.status==='running'?Date.now()-runSession.segmentStartedAt:0)}
+function movingMs(){if(!runSession)return 0;return (runSession.movingMs||0)+(runSession.status==='running'&&!runSession.autoPaused&&runSession.movingSegmentAt?Date.now()-runSession.movingSegmentAt:0)}
+function formatClock(ms){const sec=Math.max(0,Math.floor(ms/1000)),h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;return [h,m,s].map(x=>String(x).padStart(2,'0')).join(':')}
+function paceText(secPerKm){if(!Number.isFinite(secPerKm)||secPerKm<=0||secPerKm>3600)return `--'--"`;const m=Math.floor(secPerKm/60),s=Math.round(secPerKm%60);return `${m}'${String(s).padStart(2,'0')}"`}
+function runCalories(distanceKm){const weight=+state.settings.currentWeight||78;return Math.round(distanceKm*weight)}
+function renderRun(){
+  const r=runSession,d=r?r.distanceM/1000:0,ms=r?elapsedMs():0,avg=d>0?(ms/1000)/d:Infinity;
+  runEls.time.textContent=formatClock(ms);runEls.distance.textContent=d.toFixed(2);runEls.averagePace.textContent=paceText(avg);
+  runEls.movingTime.textContent=formatClock(r?movingMs():0);runEls.topSpeed.textContent=((r?.topSpeedMps||0)*3.6).toFixed(1);runEls.quality.textContent=r?.gpsEnabled?gpsQualityLabel(r?.accuracy):'GPS OFF';drawLiveRoute();
+  runEls.currentPace.textContent=paceText(r?.currentPace||Infinity);runEls.calories.textContent=runCalories(d);
+  runEls.accuracy.textContent=r?.gpsEnabled?(r?.accuracy?Math.round(r.accuracy):'--'):'OFF';
+  runEls.gpsToggle.disabled=!!r;runEls.gpsToggle.checked=r?r.gpsEnabled:runEls.gpsToggle.checked;
+  if(!r){
+    runEls.title.textContent='Ready to run';
+    runEls.note.textContent=runEls.gpsToggle.checked?'GPS will map your route after you tap Start Run.':'Private timer mode. No location will be collected.';
+    runEls.gps.textContent=runEls.gpsToggle.checked?'GPS waiting':'GPS off';runEls.gps.className='gps-badge';
+    runEls.start.hidden=false;runEls.pause.hidden=true;runEls.finish.hidden=true
+  } else if(r.status==='running'){
+    runEls.title.textContent=r.autoPaused?'Auto paused':'Run in progress';
+    runEls.note.textContent=r.autoPaused?'Movement stopped. ELDYN will resume automatically.':(r.gpsEnabled?'Route tracking is active. Stay aware of your surroundings.':'Timer-only private run. You can enter distance when finishing.');
+    runEls.gps.textContent=r.gpsEnabled?(r.hasFix?'GPS live':'Finding GPS…'):'GPS off';runEls.gps.className=r.gpsEnabled?'gps-badge live':'gps-badge';
+    runEls.start.hidden=true;runEls.pause.hidden=false;runEls.pause.textContent='Ⅱ Pause';runEls.finish.hidden=false
+  } else {
+    runEls.title.textContent='Run paused';runEls.note.textContent='Resume when you are ready.';
+    runEls.gps.textContent=r.gpsEnabled?'GPS paused':'GPS off';runEls.gps.className='gps-badge';
+    runEls.start.hidden=true;runEls.pause.hidden=false;runEls.pause.textContent='▶ Resume';runEls.finish.hidden=false
+  }
+  const splits=r?.splits||[];
+  runEls.splits.innerHTML=splits.length?splits.map((x,i)=>`<div class="split-row"><span>KM ${i+1}</span><strong>${paceText(x.seconds)}</strong></div>`).join(''):'<div class="empty-state"><span>🏃</span><p>Your 1 km splits will appear here.</p></div>';
+  const history=(state.runs||[]).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt)).slice(0,10);
+  runEls.history.innerHTML=history.length?history.map(x=>`<div class="run-history-card"><div><h3>${new Date(x.endedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</h3><p>${formatClock(x.durationMs)} · ${paceText(x.avgPaceSecKm)}/km · ${x.calories} kcal ${x.gpsEnabled===false?'· GPS OFF':''}</p></div><div class="run-history-actions"><strong class="history-distance">${x.distanceKm.toFixed(2)} km</strong><button class="mini-edit share-run-btn" data-run-id="${x.id}">Share card</button></div></div>`).join(''):'<div class="empty-state"><span>👟</span><p>No completed runs yet.</p></div>';
+  runEls.history.querySelectorAll('.share-run-btn').forEach(btn=>btn.addEventListener('click',()=>openShareCard(btn.dataset.runId)));
+}
+async function requestWakeLock(){try{if('wakeLock'in navigator)runWakeLock=await navigator.wakeLock.request('screen')}catch{}}
+function releaseWakeLock(){try{runWakeLock?.release()}catch{}runWakeLock=null}
+function startGps(){if(!runSession?.gpsEnabled)return;if(!navigator.geolocation){return gpsError({message:'This browser does not support GPS.'})}runWatchId=navigator.geolocation.watchPosition(onGps,gpsError,{enableHighAccuracy:true,maximumAge:500,timeout:15000})}
+function stopGps(){if(runWatchId!==null)navigator.geolocation.clearWatch(runWatchId);runWatchId=null}
+function onGps(pos){
+  if(!runSession||runSession.status!=='running'||!runSession.gpsEnabled)return;
+  const c=pos.coords,p={lat:c.latitude,lon:c.longitude,t:pos.timestamp||Date.now(),accuracy:c.accuracy};
+  runSession.accuracy=c.accuracy;runSession.hasFix=true;if(c.accuracy>65){renderRun();return}
+  const prev=runSession.lastPoint;
+  if(prev){
+    const delta=haversine(prev,p),seconds=(p.t-prev.t)/1000,speed=seconds>0?delta/seconds:0;
+    runSession.speedSamples=(runSession.speedSamples||[]).concat(speed).slice(-5);
+    const sorted=[...runSession.speedSamples].sort((x,y)=>x-y),smooth=sorted[Math.floor(sorted.length/2)]||0;
+    if(runSession.autoPauseEnabled){
+      if(smooth<.45){
+        runSession.stillSince=runSession.stillSince||Date.now();
+        if(!runSession.autoPaused&&Date.now()-runSession.stillSince>6000){
+          runSession.autoPaused=true;
+          if(runSession.movingSegmentAt){runSession.movingMs+=Date.now()-runSession.movingSegmentAt;runSession.movingSegmentAt=null}
+        }
+      }else{
+        runSession.stillSince=null;
+        if(runSession.autoPaused){runSession.autoPaused=false;runSession.movingSegmentAt=Date.now();runSession.lastPoint=p;saveActiveRun();renderRun();return}
+      }
+    }
+    if(delta>=1.5&&delta<100&&speed<12&&!runSession.autoPaused){
+      runSession.distanceM+=delta;runSession.currentPace=smooth>.5?1000/smooth:Infinity;runSession.topSpeedMps=Math.max(runSession.topSpeedMps||0,smooth);runSession.route.push({lat:p.lat,lon:p.lon});
+      const completed=Math.floor(runSession.distanceM/1000);
+      while(runSession.splits.length<completed){const totalSec=movingMs()/1000,previous=runSession.splits.reduce((n,x)=>n+x.seconds,0);runSession.splits.push({km:runSession.splits.length+1,seconds:Math.max(1,totalSec-previous)})}
+    }
+  } else runSession.route.push({lat:p.lat,lon:p.lon});
+  runSession.lastPoint=p;saveActiveRun();renderRun()
+}
+function gpsError(err){runEls.gps.textContent=err?.code===1?'Location denied':'GPS unavailable';runEls.gps.className='gps-badge error';runEls.note.textContent=err?.code===1?'Allow location access or finish and restart with GPS switched off.':'Move outdoors, or restart with GPS switched off.'}
+function beginRun(){
+  const gpsEnabled=runEls.gpsToggle.checked;
+  if(gpsEnabled&&!window.isSecureContext)return alert('GPS requires HTTPS. Open the Vercel URL, or switch GPS off.');
+  runSession={status:'running',gpsEnabled,autoPauseEnabled:runEls.autoPause.checked,autoPaused:false,startedAt:new Date().toISOString(),segmentStartedAt:Date.now(),elapsedBefore:0,movingMs:0,movingSegmentAt:Date.now(),distanceM:0,lastPoint:null,currentPace:Infinity,topSpeedMps:0,accuracy:null,hasFix:false,speedSamples:[],splits:[],route:[]};saveActiveRun();
+  if(gpsEnabled)startGps();requestWakeLock();runTimer=setInterval(renderRun,1000);renderRun()
+}
+function togglePause(){
+  if(!runSession)return;
+  if(runSession.status==='running'){runSession.elapsedBefore=elapsedMs();if(runSession.movingSegmentAt){runSession.movingMs=movingMs();runSession.movingSegmentAt=null}runSession.status='paused';runSession.autoPaused=false;runSession.lastPoint=null;stopGps();releaseWakeLock();saveActiveRun()}
+  else{runSession.status='running';runSession.segmentStartedAt=Date.now();runSession.movingSegmentAt=Date.now();if(runSession.gpsEnabled)startGps();requestWakeLock();saveActiveRun()}
+  renderRun()
+}
+function finishRun(){
+  if(!runSession)return;
+  const durationMs=elapsedMs(),movingDurationMs=movingMs();let distanceKm=runSession.distanceM/1000;
+  if(durationMs<10000&&!confirm('This run is under 10 seconds. Finish without saving?'))return;
+  if(!runSession.gpsEnabled){
+    const manual=prompt('GPS was off. Enter your distance in kilometres (example: 3.5).','');
+    if(manual===null)return;
+    distanceKm=Math.max(0,Number(String(manual).replace(',','.'))||0);
+  }
+  stopGps();releaseWakeLock();clearInterval(runTimer);runTimer=null;
+  if(distanceKm>=.02){
+    const record={id:crypto.randomUUID(),startedAt:runSession.startedAt,endedAt:new Date().toISOString(),durationMs,distanceKm,
+      avgPaceSecKm:((movingDurationMs||durationMs)/1000)/distanceKm,calories:runCalories(distanceKm),splits:runSession.splits,
+      movingDurationMs,topSpeedKmh:(runSession.topSpeedMps||0)*3.6,route:runSession.route||[],gpsEnabled:runSession.gpsEnabled,autoPauseEnabled:runSession.autoPauseEnabled};
+    state.runs=state.runs||[];state.runs.push(record);
+    const log=getLog(todayKey());log.runs=log.runs||[];log.runs.push(record);log.priorities.workout=true;log.updatedAt=new Date().toISOString();saveState();
+    const savedId=record.id;runSession=null;saveActiveRun();renderRun();renderToday();openShareCard(savedId)
+  } else {runSession=null;saveActiveRun();renderRun()}
+}
+function coverImage(ctx,img,w,h){const scale=Math.max(w/img.width,h/img.height),sw=w/scale,sh=h/scale,sx=(img.width-sw)/2,sy=(img.height-sh)/2;ctx.drawImage(img,sx,sy,sw,sh,0,0,w,h)}
+function drawRoute(ctx,route,x,y,w,h){
+  if(!route||route.length<2)return false;
+  const lats=route.map(p=>p.lat),lons=route.map(p=>p.lon),minLat=Math.min(...lats),maxLat=Math.max(...lats),minLon=Math.min(...lons),maxLon=Math.max(...lons);
+  const pad=18,dx=Math.max(maxLon-minLon,.00001),dy=Math.max(maxLat-minLat,.00001);
+  ctx.beginPath();route.forEach((p,i)=>{const px=x+pad+(p.lon-minLon)/dx*(w-pad*2),py=y+h-pad-(p.lat-minLat)/dy*(h-pad*2);i?ctx.lineTo(px,py):ctx.moveTo(px,py)});
+  ctx.lineWidth=Math.max(6,w*.018);ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#b9ff3f';ctx.shadowColor='rgba(0,0,0,.45)';ctx.shadowBlur=10;ctx.stroke();ctx.shadowBlur=0;
+  return true
+}
+function renderShareCard(){
+  if(!shareRunRecord)return;
+  const ratio=shareEls.ratio.value,sizes={story:[1080,1920],feed:[1080,1350],square:[1080,1080]},[w,h]=sizes[ratio];
+  const c=shareEls.canvas,ctx=c.getContext('2d');c.width=w;c.height=h;
+  if(sharePhotoImage)coverImage(ctx,sharePhotoImage,w,h);else{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#111711');g.addColorStop(1,'#050706');ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}
+  const grad=ctx.createLinearGradient(0,h*.28,0,h);grad.addColorStop(0,'rgba(0,0,0,.05)');grad.addColorStop(1,'rgba(0,0,0,.82)');ctx.fillStyle=grad;ctx.fillRect(0,0,w,h);
+  const r=shareRunRecord,pad=w*.075;
+  ctx.fillStyle='#b9ff3f';ctx.font=`800 ${Math.round(w*.036)}px system-ui`;ctx.fillText('◆ ELDYN RUN CERTIFIED',pad,pad*1.15);
+  ctx.fillStyle='#ffffff';ctx.font=`800 ${Math.round(w*.118)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,pad,h*.64);
+  ctx.font=`700 ${Math.round(w*.044)}px system-ui`;ctx.fillText(`${formatClock(r.durationMs)}   ·   AVG ${paceText(r.avgPaceSecKm)}/KM`,pad,h*.70);
+  const mapW=w*.34,mapH=w*.27,mapX=w-pad-mapW,mapY=pad*1.8;
+  ctx.fillStyle='rgba(0,0,0,.38)';ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(mapX,mapY,mapW,mapH,28);ctx.fill();ctx.stroke();
+  const hasRoute=drawRoute(ctx,r.route,mapX+12,mapY+12,mapW-24,mapH-24);
+  if(!hasRoute){ctx.fillStyle='rgba(255,255,255,.75)';ctx.font=`600 ${Math.round(w*.026)}px system-ui`;ctx.textAlign='center';ctx.fillText(r.gpsEnabled===false?'PRIVATE RUN · GPS OFF':'NO ROUTE DATA',mapX+mapW/2,mapY+mapH/2);ctx.textAlign='left'}
+  const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim();
+  ctx.font=`500 ${Math.round(w*.034)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.94)';ctx.fillText(caption.slice(0,64),pad,h*.79);
+  ctx.font=`600 ${Math.round(w*.025)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.72)';
+  ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL  ·  ELDYN`,pad,h-pad*.75)
+}
+function openShareCard(id){
+  shareRunRecord=(state.runs||[]).find(r=>r.id===id);if(!shareRunRecord)return;
+  shareEls.caption.value='Today, I showed up. (ง •̀_•́)ง';sharePhotoImage=null;shareEls.photo.value='';renderShareCard();shareEls.dialog.showModal()
+}
+shareEls.photo.addEventListener('change',()=>{const file=shareEls.photo.files?.[0];if(!file)return;const img=new Image();img.onload=()=>{sharePhotoImage=img;renderShareCard();URL.revokeObjectURL(img.src)};img.src=URL.createObjectURL(file)});
+shareEls.ratio.addEventListener('change',renderShareCard);shareEls.caption.addEventListener('input',renderShareCard);shareEls.render.addEventListener('click',renderShareCard);
+function canvasBlob(){return new Promise(resolve=>shareEls.canvas.toBlob(resolve,'image/png',.95))}
+shareEls.download.addEventListener('click',async()=>{const blob=await canvasBlob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
+shareEls.nativeShare.addEventListener('click',async()=>{const blob=await canvasBlob(),file=new File([blob],`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`,{type:'image/png'});if(navigator.canShare?.({files:[file]})){await navigator.share({title:'ELDYN Run',text:'ELDYN Run Certified',files:[file]})}else{alert('Direct sharing is not supported here. Use Save image, then share it from your gallery.')}});
+runEls.start.onclick=beginRun;runEls.pause.onclick=togglePause;runEls.finish.onclick=finishRun;runEls.gpsToggle.addEventListener('change',renderRun);runEls.autoPause.addEventListener('change',renderRun);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&runSession?.status==='running')requestWakeLock();saveActiveRun()});window.addEventListener('beforeunload',saveActiveRun);restoreActiveRun();
+
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;installBtn.hidden=false});installBtn.onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;installBtn.hidden=true}};if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));initSupabase();render();renderRun();
+
+
+// --- ELDYN AI FOOD SCAN v4.1 ---
+let foodScanImageData='',foodScanItems=[],foodScanMealIndex=0;
+const foodScanEls={
+  dialog:document.getElementById('foodScanDialog'),input:document.getElementById('foodScanInput'),preview:document.getElementById('foodScanPreview'),placeholder:document.getElementById('foodScanPlaceholder'),meal:document.getElementById('foodScanMealSelect'),analyze:document.getElementById('analyzeFoodBtn'),status:document.getElementById('foodScanStatus'),results:document.getElementById('foodScanResults'),summary:document.getElementById('foodScanSummary'),add:document.getElementById('addFoodScanItemBtn'),save:document.getElementById('saveFoodScanBtn')
+};
+function openFoodScan(index=0){
+  const meals=ensureMeals(getLog(activeDate),activeDate);foodScanMealIndex=Math.max(0,Math.min(index,meals.length-1));
+  foodScanEls.meal.innerHTML=meals.map((m,i)=>`<option value="${i}" ${i===foodScanMealIndex?'selected':''}>${escapeHtml(m.name)}</option>`).join('');
+  foodScanImageData='';foodScanItems=[];foodScanEls.input.value='';foodScanEls.preview.hidden=true;foodScanEls.placeholder.hidden=false;foodScanEls.analyze.disabled=true;foodScanEls.status.textContent='사진을 선택해 주세요.';foodScanEls.results.innerHTML='';foodScanEls.summary.hidden=true;foodScanEls.add.hidden=true;foodScanEls.save.hidden=true;foodScanEls.dialog.showModal();
+}
+async function imageFileToDataUrl(file){
+  if(!file||!file.type.startsWith('image/'))throw new Error('이미지 파일을 선택해 주세요.');
+  if(file.size>15*1024*1024)throw new Error('사진 용량은 15MB 이하로 선택해 주세요.');
+  const raw=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(new Error('사진을 읽지 못했습니다.'));r.readAsDataURL(file)});
+  const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=()=>reject(new Error('사진을 열지 못했습니다.'));i.src=raw});
+  const max=1280,scale=Math.min(1,max/Math.max(img.width,img.height)),canvas=document.createElement('canvas');canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',.82)
+}
+foodScanEls.input.onchange=async e=>{try{foodScanImageData=await imageFileToDataUrl(e.target.files?.[0]);foodScanEls.preview.src=foodScanImageData;foodScanEls.preview.hidden=false;foodScanEls.placeholder.hidden=true;foodScanEls.analyze.disabled=false;foodScanEls.status.textContent='사진이 준비됐어요. AI 분석하기를 눌러 주세요.'}catch(err){alert(err.message)}};
+foodScanEls.meal.onchange=()=>foodScanMealIndex=+foodScanEls.meal.value||0;
+function normaliseScanItem(x={}){return{name:String(x.name||'음식'),amount:Math.max(0,+x.amount||100),unit:String(x.unit||'g'),kcal:Math.max(0,Math.round(+x.kcal||0)),protein:Math.max(0,roundMacro(+x.protein||0)),carbs:Math.max(0,roundMacro(+x.carbs||0)),fat:Math.max(0,roundMacro(+x.fat||0)),confidence:Math.max(0,Math.min(100,Math.round(+x.confidence||60)))}}
+function renderFoodScanItems(){
+  foodScanEls.results.innerHTML=foodScanItems.map((x,i)=>`<div class="food-scan-item" data-scan-index="${i}"><label class="food-name-field">음식명<input data-scan-field="name" value="${escapeHtml(x.name)}"></label><label>양<input data-scan-field="amount" type="number" min="0" step="0.1" value="${x.amount}"></label><label>kcal<input data-scan-field="kcal" type="number" min="0" step="1" value="${x.kcal}"></label><label>단백질<input data-scan-field="protein" type="number" min="0" step="0.1" value="${x.protein}"></label><label>탄수화물<input data-scan-field="carbs" type="number" min="0" step="0.1" value="${x.carbs}"></label><label>지방<input data-scan-field="fat" type="number" min="0" step="0.1" value="${x.fat}"></label><button type="button" class="mini-edit remove-scan-item" data-remove-scan="${i}">삭제</button><div class="food-scan-confidence">AI 확신도 ${x.confidence}% · 단위 ${escapeHtml(x.unit)}</div></div>`).join('')||'<div class="empty-state"><span>🍽️</span><p>분석된 음식이 없습니다. 직접 음식을 추가할 수 있어요.</p></div>';
+  const t=foodScanItems.reduce((a,x)=>({kcal:a.kcal+(+x.kcal||0),protein:a.protein+(+x.protein||0),carbs:a.carbs+(+x.carbs||0),fat:a.fat+(+x.fat||0)}),{kcal:0,protein:0,carbs:0,fat:0});
+  foodScanEls.summary.innerHTML=`<strong>${Math.round(t.kcal)} kcal</strong><span>P ${roundMacro(t.protein)}g · C ${roundMacro(t.carbs)}g · F ${roundMacro(t.fat)}g</span>`;foodScanEls.summary.hidden=false;foodScanEls.add.hidden=false;foodScanEls.save.hidden=false;
+}
+foodScanEls.results.oninput=e=>{const row=e.target.closest('[data-scan-index]'),field=e.target.dataset.scanField;if(!row||!field)return;const i=+row.dataset.scanIndex;foodScanItems[i][field]=field==='name'?e.target.value:Math.max(0,+e.target.value||0);renderFoodScanSummaryOnly()};
+function renderFoodScanSummaryOnly(){const t=foodScanItems.reduce((a,x)=>({kcal:a.kcal+(+x.kcal||0),protein:a.protein+(+x.protein||0),carbs:a.carbs+(+x.carbs||0),fat:a.fat+(+x.fat||0)}),{kcal:0,protein:0,carbs:0,fat:0});foodScanEls.summary.innerHTML=`<strong>${Math.round(t.kcal)} kcal</strong><span>P ${roundMacro(t.protein)}g · C ${roundMacro(t.carbs)}g · F ${roundMacro(t.fat)}g</span>`}
+foodScanEls.results.onclick=e=>{const b=e.target.closest('[data-remove-scan]');if(!b)return;foodScanItems.splice(+b.dataset.removeScan,1);renderFoodScanItems()};
+foodScanEls.add.onclick=()=>{foodScanItems.push(normaliseScanItem({name:'직접 입력',amount:100,confidence:100}));renderFoodScanItems()};
+foodScanEls.analyze.onclick=async()=>{
+  if(!foodScanImageData)return;foodScanEls.analyze.disabled=true;foodScanEls.status.textContent='AI가 음식과 양을 분석하고 있어요…';
+  try{
+    if(!supabaseClient||!currentUser)throw new Error('AI 음식 분석은 로그인 후 사용할 수 있어요. ◎ 버튼에서 로그인해 주세요.');
+    const {data,error}=await supabaseClient.functions.invoke('analyze-food',{body:{imageDataUrl:foodScanImageData,locale:'ko-KR'}});if(error)throw error;
+    if(!data?.items?.length)throw new Error(data?.error||'음식을 인식하지 못했습니다. 다른 각도의 사진을 사용해 주세요.');
+    foodScanItems=data.items.map(normaliseScanItem);foodScanEls.status.textContent=`${foodScanItems.length}개 음식을 찾았어요. 양과 영양성분을 확인한 뒤 저장해 주세요.`;renderFoodScanItems();
+  }catch(err){foodScanEls.status.textContent='분석 실패: '+(err.message||'알 수 없는 오류');foodScanEls.add.hidden=false;foodScanEls.save.hidden=foodScanItems.length===0}
+  finally{foodScanEls.analyze.disabled=false}
+};
+foodScanEls.save.onclick=()=>{
+  if(!foodScanItems.length)return alert('저장할 음식이 없습니다.');const log=getLog(activeDate),meals=ensureMeals(log,activeDate),meal=meals[foodScanMealIndex];meal.foodItems=meal.foodItems||[];
+  meal.foodItems.push(...foodScanItems.map(x=>({...normaliseScanItem(x),source:'ai-photo',scannedAt:new Date().toISOString()})));meal.customText=meal.foodItems.map(x=>x.name).join(' · ');meal.done=true;syncFoodTotals(log,meals);log.priorities.nutrition=meals.every(x=>x.done);log.updatedAt=new Date().toISOString();saveState();foodScanEls.dialog.close();render();alert('AI 식단 분석 결과를 저장했어요.')
+};
+
+// v4.3 — packaged nutrition label scan and optional meal save
+const nutritionLabelEls={
+  open:document.getElementById('nutritionLabelBtn'),dialog:document.getElementById('nutritionLabelDialog'),input:document.getElementById('nutritionLabelInput'),preview:document.getElementById('nutritionLabelPreview'),placeholder:document.getElementById('nutritionLabelPlaceholder'),analyze:document.getElementById('analyzeNutritionLabelBtn'),status:document.getElementById('nutritionLabelStatus'),result:document.getElementById('nutritionLabelResult'),savePanel:document.getElementById('nutritionLabelSavePanel'),meal:document.getElementById('nutritionLabelMealSelect'),save:document.getElementById('saveNutritionLabelBtn')
+};
+let nutritionLabelImageData='',nutritionLabelData=null;
+function openNutritionLabelScan(){
+  const meals=ensureMeals(getLog(activeDate),activeDate);
+  nutritionLabelEls.meal.innerHTML=meals.map((m,i)=>({m,i})).filter(x=>['breakfast','lunch','dinner'].includes(x.m.key)).map(x=>`<option value="${x.i}">${escapeHtml(x.m.name)}</option>`).join('');
+  nutritionLabelImageData='';nutritionLabelData=null;nutritionLabelEls.input.value='';nutritionLabelEls.preview.hidden=true;nutritionLabelEls.placeholder.hidden=false;nutritionLabelEls.analyze.disabled=true;nutritionLabelEls.status.textContent='사진을 선택해 주세요.';nutritionLabelEls.result.innerHTML='';nutritionLabelEls.savePanel.hidden=true;nutritionLabelEls.dialog.showModal();
+}
+function safeLabelNumber(v){return Math.max(0,+v||0)}
+function renderNutritionLabelResult(note=''){
+  const x=nutritionLabelData;if(!x)return;
+  const eaten=x.eatenAmount||x.basisAmount||x.totalAmount||0;
+  nutritionLabelEls.result.innerHTML=`<div class="nutrition-label-card"><div class="section-head"><div><p class="eyebrow">ANALYSIS RESULT</p><h3>${escapeHtml(x.productName||'제품명 미확인')}</h3></div><span class="label-confidence">AI 확신도 ${Math.round(x.confidence||0)}%</span></div><div class="nutrition-label-grid">
+  <label>제품명<input data-label-field="productName" value="${escapeHtml(x.productName||'')}"></label>
+  <label>총 내용량<input data-label-field="totalAmount" type="number" min="0" step="0.1" value="${x.totalAmount||0}"></label>
+  <label>영양표 기준량<input data-label-field="basisAmount" type="number" min="0" step="0.1" value="${x.basisAmount||0}"></label>
+  <label>단위<input data-label-field="basisUnit" value="${escapeHtml(x.basisUnit||'g')}"></label>
+  <label>내가 먹은 양<input data-label-field="eatenAmount" type="number" min="0" step="0.1" value="${eaten}"></label>
+  <label>열량 (기준량당)<input data-label-field="kcal" type="number" min="0" step="1" value="${x.kcal||0}"></label>
+  <label>탄수화물 g<input data-label-field="carbs" type="number" min="0" step="0.1" value="${x.carbs||0}"></label>
+  <label>단백질 g<input data-label-field="protein" type="number" min="0" step="0.1" value="${x.protein||0}"></label>
+  <label>지방 g<input data-label-field="fat" type="number" min="0" step="0.1" value="${x.fat||0}"></label>
+  <label>당류 g<input data-label-field="sugars" type="number" min="0" step="0.1" value="${x.sugars||0}"></label>
+  <label>나트륨 mg<input data-label-field="sodium" type="number" min="0" step="1" value="${x.sodium||0}"></label>
+  </div><p id="nutritionLabelCalculated" class="nutrition-label-note"></p>${note?`<p class="nutrition-label-note">${escapeHtml(note)}</p>`:''}</div>`;
+  updateNutritionLabelCalculated();nutritionLabelEls.savePanel.hidden=false;
+}
+function nutritionLabelScaled(){
+  const x=nutritionLabelData||{},basis=safeLabelNumber(x.basisAmount)||1,eaten=safeLabelNumber(x.eatenAmount)||basis,ratio=eaten/basis;
+  return {amount:eaten,unit:x.basisUnit||'g',kcal:safeLabelNumber(x.kcal)*ratio,protein:safeLabelNumber(x.protein)*ratio,carbs:safeLabelNumber(x.carbs)*ratio,fat:safeLabelNumber(x.fat)*ratio,sugars:safeLabelNumber(x.sugars)*ratio,sodium:safeLabelNumber(x.sodium)*ratio};
+}
+function updateNutritionLabelCalculated(){const y=nutritionLabelScaled(),el=document.getElementById('nutritionLabelCalculated');if(el)el.textContent=`섭취량 환산: ${Math.round(y.kcal)} kcal · P ${roundMacro(y.protein)}g · C ${roundMacro(y.carbs)}g · F ${roundMacro(y.fat)}g · 당류 ${roundMacro(y.sugars)}g · 나트륨 ${Math.round(y.sodium)}mg`}
+if(nutritionLabelEls.open)nutritionLabelEls.open.onclick=openNutritionLabelScan;
+nutritionLabelEls.input.onchange=async e=>{try{nutritionLabelImageData=await imageFileToDataUrl(e.target.files?.[0]);nutritionLabelEls.preview.src=nutritionLabelImageData;nutritionLabelEls.preview.hidden=false;nutritionLabelEls.placeholder.hidden=true;nutritionLabelEls.analyze.disabled=false;nutritionLabelEls.status.textContent='사진이 준비됐어요. 영양정보 분석하기를 눌러 주세요.'}catch(err){alert(err.message)}};
+nutritionLabelEls.analyze.onclick=async()=>{
+  if(!nutritionLabelImageData)return;if(!supabaseClient||!currentUser){alert('AI 분석을 사용하려면 ◎ 버튼에서 로그인해 주세요.');return}
+  nutritionLabelEls.analyze.disabled=true;nutritionLabelEls.status.textContent='AI가 영양정보표의 숫자와 기준량을 읽고 있어요…';
+  try{const {data,error}=await supabaseClient.functions.invoke('analyze-food',{body:{imageDataUrl:nutritionLabelImageData,locale:'ko-KR',mode:'label'}});if(error)throw error;if(!data?.label)throw new Error(data?.error||'영양정보를 찾지 못했습니다.');nutritionLabelData={...data.label,eatenAmount:data.label.basisAmount||data.label.totalAmount||0};nutritionLabelEls.status.textContent='분석을 완료했어요. 숫자를 확인하거나 수정한 뒤 필요하면 식단에 저장하세요.';renderNutritionLabelResult(data.note||'')}
+  catch(err){nutritionLabelEls.status.textContent='분석 실패: '+(err.message||'알 수 없는 오류')}
+  finally{nutritionLabelEls.analyze.disabled=false}
+};
+nutritionLabelEls.result.oninput=e=>{const f=e.target.dataset.labelField;if(!f||!nutritionLabelData)return;nutritionLabelData[f]=f==='productName'||f==='basisUnit'?e.target.value:safeLabelNumber(e.target.value);updateNutritionLabelCalculated()};
+nutritionLabelEls.save.onclick=()=>{
+  if(!nutritionLabelData)return;const idx=+nutritionLabelEls.meal.value,log=getLog(activeDate),meals=ensureMeals(log,activeDate),meal=meals[idx];if(!meal)return alert('저장할 식사를 선택해 주세요.');const y=nutritionLabelScaled();meal.foodItems=meal.foodItems||[];meal.foodItems.push({name:nutritionLabelData.productName||'영양정보표 제품',amount:y.amount,unit:y.unit,kcal:y.kcal,protein:y.protein,carbs:y.carbs,fat:y.fat,sugars:y.sugars,sodium:y.sodium,source:'nutrition-label',confidence:nutritionLabelData.confidence||0,scannedAt:new Date().toISOString()});meal.customText=meal.foodItems.map(z=>z.name).join(' · ');meal.done=true;syncFoodTotals(log,meals);log.priorities.nutrition=meals.every(z=>z.done);log.updatedAt=new Date().toISOString();saveState();nutritionLabelEls.dialog.close();render();alert(`${meal.name} 식단에 영양정보를 저장했어요.`)
+};

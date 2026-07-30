@@ -1,4 +1,4 @@
-# ELLEN'S PROJECT v3.0 MOBILE
+# ELDYN v3.0 MOBILE
 
 Mobile-first fitness OS with Supabase sync.
 
@@ -9,7 +9,7 @@ Mobile-first fitness OS with Supabase sync.
 - Larger touch targets and mobile-friendly dialogs
 - Existing food search, calorie totals, nutrition targets and cloud sync retained
 
-# ELLEN'S PROJECT
+# ELDYN
 
 **Smile. Train. Become the Machine.**
 

@@ -1,4 +1,4 @@
--- ELLEN'S PROJECT — safe to run more than once
+-- ELDYN — safe to run more than once
 create table if not exists public.daily_logs (
   user_id uuid not null references auth.users(id) on delete cascade,
   date date not null,
