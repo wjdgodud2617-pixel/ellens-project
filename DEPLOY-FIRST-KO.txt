@@ -1,0 +1,8 @@
+ELDYN v5.6 Stable — Vercel 배포용
+
+중요:
+1) 이 ZIP을 압축 해제했을 때 index.html이 바로 보여야 합니다.
+2) Vercel Root Directory는 비워두거나 프로젝트 루트(/)로 설정하세요.
+3) Framework Preset은 Other, Build Command는 비움, Output Directory도 비움.
+4) 이전에 잘못 설정된 Root Directory가 supabase/functions/analyze-food라면 반드시 제거하세요.
+5) Supabase Edge Function은 이 배포 ZIP에서 분리했습니다. 기존 Supabase에 따로 배포된 함수를 그대로 사용합니다.
