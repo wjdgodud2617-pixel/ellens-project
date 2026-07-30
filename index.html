@@ -194,12 +194,12 @@
   <dialog id="changeWorkoutDialog" class="modal workout-change-modal">
     <form method="dialog"><button class="close-btn" aria-label="Close">×</button></form>
     <p class="eyebrow">CHANGE TODAY'S WORKOUT</p>
-    <h2>HYROX로 전체 변경</h2>
-    <p class="muted">기존 운동은 보관되며 언제든 원래 계획으로 복원할 수 있어요.</p>
+    <h2>오늘 운동 전체 변경</h2>
+    <p class="muted">Strength, Running, HYROX, Conditioning, Recovery 중 선택하세요. 기존 계획은 보관됩니다.</p>
     <div id="workoutPlanOptions" class="workout-plan-options"></div>
     <div class="workout-change-actions">
       <button id="restoreWorkoutPlanBtn" type="button" class="secondary-btn" hidden>원래 계획으로 복원</button>
-      <button id="applyWorkoutChangeBtn" type="button" class="primary-btn">HYROX로 전체 교체</button>
+      <button id="applyWorkoutChangeBtn" type="button" class="primary-btn">선택한 운동으로 전체 교체</button>
     </div>
   </dialog>
 
@@ -229,10 +229,18 @@
       <button class="close-btn" value="cancel" aria-label="Close">×</button>
       <p class="eyebrow">ELDYN · CERTIFIED RUN</p>
       <h2>Create Run Share Card</h2>
-      <p class="muted">Choose a photo, add a line, and export an Instagram-ready card.</p>
+      <p class="muted">사진 위 실제 GPS 경로와 Start / Finish 마커를 올려 인증 카드를 만듭니다.</p>
 
       <div class="share-controls">
         <label class="field-card"><span>Background photo</span><input id="sharePhotoInput" type="file" accept="image/*" /></label>
+
+        <label class="field-card"><span>Card style</span>
+          <select id="shareStyleSelect">
+            <option value="photo" selected>Photo · 사진 위 경로</option>
+            <option value="map">Map · 지도 중심</option>
+            <option value="split">Split · 사진 + 지도</option>
+          </select>
+        </label>
         <label class="field-card"><span>Format</span>
           <select id="shareRatioSelect">
             <option value="story">Story · 9:16</option>

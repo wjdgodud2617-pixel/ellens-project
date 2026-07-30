@@ -40,6 +40,41 @@ const hyroxPlans={
     ex('hy-beg-lunge','Walking Lunges 40 m',2,20,0,'Legs · Core','Bodyweight is fine.','walking lunge technique'),ex('hy-beg-wall','Wall Balls 30 reps',3,10,4,'Legs · Shoulders','Move steadily with full control.','wall balls beginner')
   ]}
 };
+
+const workoutCatalog={
+  strength:{label:'Strength',icon:'💪',plans:{
+    lower:{name:'Lower Body Strength',meta:'55–70 min · Intermediate · Barbell / Dumbbell',exercises:[ex('wb-l-squat','Back Squat',4,8,35,'Quads · Glutes · Core','Brace, keep feet grounded, and drive up with control.','back squat form'),ex('wb-l-rdl','Romanian Deadlift',4,10,30,'Hamstrings · Glutes','Push hips back and keep the weight close.','romanian deadlift form'),ex('wb-l-lunge','Reverse Lunge',3,10,8,'Glutes · Quads','Step back softly and keep the front knee aligned.','reverse lunge form'),ex('wb-l-hip','Hip Thrust',4,12,35,'Glutes','Pause at full hip extension.','hip thrust form')]},
+    upper:{name:'Upper Body Strength',meta:'50–65 min · Intermediate · Bench / Dumbbell',exercises:[ex('wb-u-bench','Bench Press',4,8,20,'Chest · Triceps','Keep shoulder blades set and lower with control.','bench press form'),ex('wb-u-row','Seated Cable Row',4,10,25,'Back · Biceps','Pull elbows toward the ribs.','cable row form'),ex('wb-u-press','Shoulder Press',3,10,8,'Shoulders · Triceps','Keep ribs down while pressing.','shoulder press form'),ex('wb-u-pull','Lat Pulldown',3,12,25,'Lats · Biceps','Avoid leaning too far back.','lat pulldown form')]},
+    fullbody:{name:'Full Body Strength',meta:'60 min · Intermediate · Full gym',exercises:[ex('wb-f-dead','Deadlift',4,6,40,'Posterior chain','Brace and keep the bar close.','deadlift form'),ex('wb-f-goblet','Goblet Squat',3,12,12,'Legs · Core','Sit between the hips.','goblet squat form'),ex('wb-f-push','Dumbbell Bench Press',3,10,8,'Chest · Triceps','Control the lowering phase.','dumbbell bench press form'),ex('wb-f-row','One-arm Row',3,10,10,'Back · Biceps','Keep hips square.','one arm dumbbell row form'),ex('wb-f-carry','Farmer Carry',4,30,14,'Grip · Core','Walk tall with controlled steps.','farmer carry form')]},
+    glutes:{name:'Glutes & Core',meta:'45–55 min · All levels · Bands / Dumbbell',exercises:[ex('wb-g-hip','Hip Thrust',4,12,30,'Glutes','Pause and squeeze at the top.','hip thrust form'),ex('wb-g-bulgarian','Bulgarian Split Squat',3,10,8,'Glutes · Quads','Keep the front foot grounded.','bulgarian split squat form'),ex('wb-g-abduct','Band Abduction',3,20,0,'Glute medius','Move with control.','band hip abduction'),ex('wb-g-deadbug','Dead Bug',3,10,0,'Core','Keep lower back gently pressed down.','dead bug form')]},
+    push:{name:'Push Day',meta:'45–60 min · Intermediate · Chest / Shoulder',exercises:[ex('wb-p-bench','Bench Press',4,8,20,'Chest · Triceps','Stable shoulder blades.','bench press form'),ex('wb-p-incline','Incline Dumbbell Press',3,10,8,'Upper chest','Use a low incline.','incline dumbbell press'),ex('wb-p-shoulder','Shoulder Press',3,10,8,'Shoulders','Avoid shrugging.','shoulder press form'),ex('wb-p-tri','Triceps Pushdown',3,12,15,'Triceps','Keep elbows fixed.','triceps pushdown')]},
+    pull:{name:'Pull Day',meta:'45–60 min · Intermediate · Back / Biceps',exercises:[ex('wb-pl-pull','Lat Pulldown',4,10,25,'Lats · Biceps','Pull elbows down.','lat pulldown form'),ex('wb-pl-row','Cable Row',4,10,25,'Back · Biceps','Keep torso stable.','cable row form'),ex('wb-pl-face','Face Pull',3,15,10,'Rear delts','Pull toward eye level.','face pull form'),ex('wb-pl-curl','Dumbbell Curl',3,12,6,'Biceps','Avoid swinging.','dumbbell curl form')]}
+  }},
+  running:{label:'Running',icon:'🏃',plans:{
+    easy:{name:'Easy Run',meta:'30–45 min · Easy · Conversational pace',exercises:[ex('wb-r-easy','Easy Run',1,35,0,'Aerobic base','Run at a conversational pace.','easy run training')]},
+    recovery:{name:'Recovery Run',meta:'20–30 min · Very easy · Low impact',exercises:[ex('wb-r-rec','Recovery Run',1,25,0,'Recovery','Keep effort very light and relaxed.','recovery run')]},
+    tempo:{name:'Tempo Run',meta:'40–50 min · Hard · Threshold',exercises:[ex('wb-r-warm','Warm-up Jog',1,10,0,'Warm-up','Easy pace.','running warm up'),ex('wb-r-tempo','Tempo Run',1,20,0,'Threshold','Comfortably hard, even pace.','tempo run workout'),ex('wb-r-cool','Cool-down Jog',1,10,0,'Recovery','Slow down gradually.','running cool down')]},
+    interval:{name:'Interval Run',meta:'45 min · Hard · Speed',exercises:[ex('wb-r-iwarm','Warm-up',1,12,0,'Warm-up','Easy jog plus drills.','interval warm up'),ex('wb-r-int','400 m Intervals',8,400,0,'Speed','Run fast, then recover 90 seconds.','400m interval workout'),ex('wb-r-icool','Cool-down',1,10,0,'Recovery','Easy jog.','running cool down')]},
+    long:{name:'Long Run',meta:'60–90 min · Moderate · Endurance',exercises:[ex('wb-r-long','Long Run',1,75,0,'Endurance','Use a sustainable easy-to-moderate pace.','long run training')]},
+    hills:{name:'Hill Run',meta:'40 min · Hard · Strength endurance',exercises:[ex('wb-r-hwarm','Warm-up',1,12,0,'Warm-up','Easy jog.','hill running warmup'),ex('wb-r-hill','Hill Repeats',8,45,0,'Power · Cardio','Run uphill strongly, walk down.','hill repeats workout'),ex('wb-r-hcool','Cool-down',1,10,0,'Recovery','Easy jog.','running cool down')]}
+  }},
+  hyrox:{label:'HYROX',icon:'🔥',plans:{full:{...hyroxPlans.full,meta:'75–100 min · Advanced · Full simulation'},half:{...hyroxPlans.half,meta:'45–60 min · Intermediate · 4 stations'},beginner:{...hyroxPlans.beginner,meta:'35–45 min · Beginner · Reduced volume'},strength:{name:'HYROX Strength Focus',meta:'50–65 min · Intermediate · Sled / Carry',exercises:[ex('wb-hs-push','Sled Push',5,20,0,'Legs · Core','Short powerful steps.','hyrox sled push'),ex('wb-hs-pull','Sled Pull',5,20,0,'Back · Grip','Maintain rope tension.','hyrox sled pull'),ex('wb-hs-carry','Farmers Carry',4,50,16,'Grip · Core','Walk tall.','hyrox farmers carry'),ex('wb-hs-lunge','Sandbag Lunges',4,20,10,'Legs · Core','Stay upright.','hyrox lunges'),ex('wb-hs-wall','Wall Balls',5,15,6,'Legs · Shoulders','Steady sets.','hyrox wall balls')]},engine:{name:'HYROX Engine Focus',meta:'45–60 min · Hard · Run / Erg',exercises:[ex('wb-he-run','Run 1 km',4,1,0,'Cardio','Steady race pace.','hyrox running'),ex('wb-he-ski','SkiErg 750 m',2,750,0,'Cardio','Smooth rhythm.','hyrox skierg'),ex('wb-he-row','Row 750 m',2,750,0,'Cardio','Strong leg drive.','hyrox rowing')]}}
+  },
+  conditioning:{label:'Conditioning',icon:'⚡',plans:{
+    metcon:{name:'Full Body Metcon',meta:'30–40 min · Hard · Full body',exercises:[ex('wb-c-thr','Dumbbell Thruster',5,10,8,'Full body','Drive through legs.','dumbbell thruster'),ex('wb-c-row','Row',5,250,0,'Cardio','Powerful strokes.','rowing technique'),ex('wb-c-burpee','Burpees',5,10,0,'Full body','Move steadily.','burpee form')]},
+    kettlebell:{name:'Kettlebell Conditioning',meta:'30–45 min · Intermediate · Kettlebell',exercises:[ex('wb-k-swing','Kettlebell Swing',5,15,12,'Hips · Cardio','Hinge, do not squat.','kettlebell swing'),ex('wb-k-goblet','Goblet Squat',4,12,12,'Legs · Core','Keep chest tall.','goblet squat'),ex('wb-k-carry','Suitcase Carry',4,30,12,'Core · Grip','Avoid leaning.','suitcase carry')]},
+    bodyweight:{name:'Bodyweight Circuit',meta:'25–35 min · All levels · No equipment',exercises:[ex('wb-bw-squat','Air Squat',4,20,0,'Legs','Control depth.','air squat'),ex('wb-bw-push','Push-up',4,10,0,'Chest · Core','Keep body aligned.','push up form'),ex('wb-bw-mount','Mountain Climbers',4,30,0,'Core · Cardio','Keep hips steady.','mountain climber form'),ex('wb-bw-plank','Plank',4,40,0,'Core','Breathe steadily.','plank form')]},
+    rowSki:{name:'Row & SkiErg',meta:'35–45 min · Hard · Erg machines',exercises:[ex('wb-rs-row','Row 500 m',5,500,0,'Cardio','Consistent split.','rowing technique'),ex('wb-rs-ski','SkiErg 500 m',5,500,0,'Cardio','Relax the shoulders.','skierg technique')]}
+  }},
+  recovery:{label:'Recovery',icon:'🧘',plans:{
+    mobility:{name:'Full Body Mobility',meta:'20–30 min · Easy · Recovery',exercises:[ex('wb-rec-mob','Full Body Mobility',1,25,0,'Hips · Shoulders · Spine','Move slowly in a pain-free range.','full body mobility')]},
+    stretch:{name:'Stretching',meta:'15–25 min · Easy · Flexibility',exercises:[ex('wb-rec-st','Full Body Stretch',1,20,0,'Flexibility','Hold gentle stretches and breathe.','full body stretching')]},
+    active:{name:'Active Recovery',meta:'30–40 min · Very easy · Walk / Bike',exercises:[ex('wb-rec-walk','Recovery Walk',1,35,0,'Recovery','Easy conversational effort.','recovery walk')]},
+    rest:{name:'Rest Day',meta:'Rest · Hydration · Sleep',exercises:[]}
+  }}
+};
+function workoutPlanByKey(key){const [category,plan]=String(key||'').split(':');return workoutCatalog[category]?.plans?.[plan]||null}
+function yesterdayRecommendation(){const y=getLog(shiftDate(activeDate,-1)),name=(y.planName||'').toLowerCase();if(name.includes('hyrox')||name.includes('interval')||name.includes('metcon'))return 'recovery:mobility';if(name.includes('lower'))return 'strength:upper';if(name.includes('upper'))return 'running:easy';return 'strength:fullbody'}
 const defaults={runs:[],settings:{name:'Ellen',sex:'female',age:37,height:160,currentWeight:78,currentBodyFat:'',goalWeight:74.5,goalMode:'fatloss',activity:1.55,mealCount:4,waterGoal:2500,sleepGoal:7.5,proteinGoal:125,calorieGoal:1650,carbGoal:165,fatGoal:55},logs:{},body:[],lastCelebrated:{}};
 let state=loadState(),runSession=null,runTimer=null,runWatchId=null,runWakeLock=null,activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null;
 function todayKey(){return new Date().toLocaleDateString('en-CA')}function clone(v){return JSON.parse(JSON.stringify(v))}function dateFromKey(k){const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d)}function keyFromDate(d){return d.toLocaleDateString('en-CA')}function shiftDate(k,n){const d=dateFromKey(k);d.setDate(d.getDate()+n);return keyFromDate(d)}
@@ -135,20 +170,18 @@ const workoutChangeEls={
   open:document.getElementById('changeWorkoutBtn'),dialog:document.getElementById('changeWorkoutDialog'),options:document.getElementById('workoutPlanOptions'),apply:document.getElementById('applyWorkoutChangeBtn'),restore:document.getElementById('restoreWorkoutPlanBtn')
 };
 function openWorkoutChange(){
-  const l=getLog(activeDate),base=weeklyPlan[dateFromKey(activeDate).getDay()].name;
-  workoutChangeEls.options.innerHTML=`<label class="workout-option selected"><input type="radio" name="workoutReplacement" value="full" checked><span><b>HYROX Full Simulation</b><small>8 × 1 km run + 8 official-style stations</small></span></label><label class="workout-option"><input type="radio" name="workoutReplacement" value="half"><span><b>HYROX Half Session</b><small>Shorter 4 km session with four stations</small></span></label><label class="workout-option"><input type="radio" name="workoutReplacement" value="beginner"><span><b>HYROX Beginner</b><small>Reduced distance and beginner-friendly volume</small></span></label><p class="muted current-plan-note">Current: ${escapeHtml(l.planName||base)}</p>`;
-  workoutChangeEls.restore.hidden=!l.originalPlan;
-  workoutChangeEls.dialog.showModal();
+  const l=getLog(activeDate),base=weeklyPlan[dateFromKey(activeDate).getDay()].name,reco=yesterdayRecommendation();
+  workoutChangeEls.options.innerHTML=`<div class="ai-workout-recommend"><span>✦ AI PICK</span><b>${escapeHtml(workoutPlanByKey(reco)?.name||'Full Body Strength')}</b><small>어제 기록과 오늘 계획을 기준으로 추천했어요.</small></div>`+Object.entries(workoutCatalog).map(([cat,data])=>`<section class="workout-category"><h3>${data.icon} ${data.label}</h3><div class="workout-category-grid">${Object.entries(data.plans).map(([key,plan])=>{const value=`${cat}:${key}`;return `<label class="workout-option ${value===reco?'recommended':''}"><input type="radio" name="workoutReplacement" value="${value}" ${value===reco?'checked':''}><span><b>${escapeHtml(plan.name)}</b><small>${escapeHtml(plan.meta||'Custom workout')}</small></span>${value===reco?'<em>추천</em>':''}</label>`}).join('')}</div></section>`).join('')+`<p class="muted current-plan-note">현재 계획: ${escapeHtml(l.planName||base)}</p>`;
+  workoutChangeEls.restore.hidden=!l.originalPlan;workoutChangeEls.apply.textContent='선택한 운동으로 전체 교체';workoutChangeEls.dialog.showModal();
 }
-function replaceWorkoutWithHyrox(key){
-  const l=getLog(activeDate),template=hyroxPlans[key]||hyroxPlans.full;
+function replaceWorkout(key){
+  const l=getLog(activeDate),template=workoutPlanByKey(key);if(!template)return;
   if(!l.originalPlan)l.originalPlan={name:l.planName||weeklyPlan[dateFromKey(activeDate).getDay()].name,source:l.planSource||'weekly',exercises:clone(l.exercises)};
-  l.exercises=clone(template.exercises).map((x,i)=>({...x,id:`${x.id}-${activeDate}-${i}`,done:false}));
-  l.planName=template.name;l.planSource=`hyrox-${key}`;l.planInitialized=true;l.priorities.workout=false;l.updatedAt=new Date().toISOString();saveState();workoutChangeEls.dialog.close();render();
+  l.exercises=clone(template.exercises).map((x,i)=>({...x,id:`${x.id}-${activeDate}-${i}`,done:false}));l.planName=template.name;l.planSource=`builder-${key}`;l.planInitialized=true;l.priorities.workout=false;l.updatedAt=new Date().toISOString();saveState();workoutChangeEls.dialog.close();render();
 }
 workoutChangeEls.open.onclick=openWorkoutChange;
 workoutChangeEls.options.onchange=e=>{if(e.target.name==='workoutReplacement'){workoutChangeEls.options.querySelectorAll('.workout-option').forEach(x=>x.classList.toggle('selected',x.contains(e.target)))}};
-workoutChangeEls.apply.onclick=()=>replaceWorkoutWithHyrox(workoutChangeEls.options.querySelector('input[name="workoutReplacement"]:checked')?.value||'full');
+workoutChangeEls.apply.onclick=()=>replaceWorkout(workoutChangeEls.options.querySelector('input[name="workoutReplacement"]:checked')?.value||yesterdayRecommendation());
 workoutChangeEls.restore.onclick=()=>{const l=getLog(activeDate);if(!l.originalPlan)return;const original=l.originalPlan;l.exercises=clone(original.exercises).map(x=>({...x,done:false}));l.planName=original.name;l.planSource=original.source;l.originalPlan=null;l.priorities.workout=false;l.updatedAt=new Date().toISOString();saveState();workoutChangeEls.dialog.close();render()};
 
 priorityGrid.onclick=e=>{const b=e.target.closest('[data-priority]');if(!b)return;const l=getLog(),k=b.dataset.priority;if(k==='workout')l.exercises.forEach(x=>x.done=!l.priorities.workout);else l.priorities[k]=!l.priorities[k];saveState();render()};
@@ -180,7 +213,7 @@ const runEls={
   quality:document.getElementById('gpsQuality'),routeCanvas:document.getElementById('liveRouteCanvas')
 };
 const shareEls={
-  dialog:document.getElementById('shareRunDialog'),photo:document.getElementById('sharePhotoInput'),ratio:document.getElementById('shareRatioSelect'),
+  dialog:document.getElementById('shareRunDialog'),photo:document.getElementById('sharePhotoInput'),ratio:document.getElementById('shareRatioSelect'),style:document.getElementById('shareStyleSelect'),
   caption:document.getElementById('shareCaptionInput'),canvas:document.getElementById('shareCanvas'),render:document.getElementById('renderShareBtn'),
   download:document.getElementById('downloadShareBtn'),nativeShare:document.getElementById('nativeShareBtn')
 };
@@ -321,34 +354,44 @@ async function drawRouteMap(ctx,route,x,y,w,h,radius=28){
   const marker=(p,label,fill)=>{ctx.beginPath();ctx.arc(p.x,p.y,15,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();ctx.lineWidth=5;ctx.strokeStyle='#fff';ctx.stroke();ctx.fillStyle='#071007';ctx.font='900 16px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,p.x,p.y+1)};
   marker(points[0],'S','#b9ff3f');marker(points[points.length-1],'F','#ffffff');ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.restore();return true
 }
+
+function routeOverlayPoints(route,x,y,w,h){
+  const clean=(route||[]).filter(p=>Number.isFinite(+p.lat)&&Number.isFinite(+p.lon));if(clean.length<2)return null;
+  let minLat=Math.min(...clean.map(p=>+p.lat)),maxLat=Math.max(...clean.map(p=>+p.lat)),minLon=Math.min(...clean.map(p=>+p.lon)),maxLon=Math.max(...clean.map(p=>+p.lon));
+  const latRange=Math.max(maxLat-minLat,.0001),lonRange=Math.max(maxLon-minLon,.0001),pad=Math.min(w,h)*.10,scale=Math.min((w-pad*2)/lonRange,(h-pad*2)/latRange);
+  return clean.map(p=>({x:x+w/2+((+p.lon-(minLon+maxLon)/2)*scale),y:y+h/2-((+p.lat-(minLat+maxLat)/2)*scale)}));
+}
+function drawRouteOverlay(ctx,route,x,y,w,h){
+  const pts=routeOverlayPoints(route,x,y,w,h);if(!pts)return false;ctx.save();ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.strokeStyle='rgba(0,0,0,.58)';ctx.lineWidth=Math.max(14,w*.018);ctx.stroke();ctx.strokeStyle='#b9ff3f';ctx.lineWidth=Math.max(8,w*.011);ctx.shadowColor='rgba(185,255,63,.6)';ctx.shadowBlur=16;ctx.stroke();ctx.shadowBlur=0;
+  const marker=(p,label,finish=false)=>{ctx.beginPath();ctx.arc(p.x,p.y,18,0,Math.PI*2);ctx.fillStyle=finish?'#fff':'#b9ff3f';ctx.fill();ctx.lineWidth=5;ctx.strokeStyle='rgba(0,0,0,.75)';ctx.stroke();ctx.fillStyle='#071007';ctx.font='900 18px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,p.x,p.y+1)};marker(pts[0],'S');marker(pts[pts.length-1],'F',true);ctx.restore();return true;
+}
 let shareRenderToken=0;
 async function renderShareCard(){
   if(!shareRunRecord)return;const token=++shareRenderToken;
-  const ratio=shareEls.ratio.value,sizes={story:[1080,1920],feed:[1080,1350],square:[1080,1080]},[w,h]=sizes[ratio];
-  const c=shareEls.canvas,ctx=c.getContext('2d');c.width=w;c.height=h;
-  if(sharePhotoImage)coverImage(ctx,sharePhotoImage,w,h);else{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#121a14');g.addColorStop(1,'#050706');ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}
-  const shade=ctx.createLinearGradient(0,0,0,h);shade.addColorStop(0,'rgba(0,0,0,.20)');shade.addColorStop(.48,'rgba(0,0,0,.12)');shade.addColorStop(1,'rgba(0,0,0,.86)');ctx.fillStyle=shade;ctx.fillRect(0,0,w,h);
-  const r=shareRunRecord,pad=w*.075,logoY=pad*.82;
-  ctx.textAlign='center';ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.046)}px system-ui`;ctx.fillText('◇',w/2,logoY);
-  ctx.font=`900 ${Math.round(w*.054)}px system-ui`;ctx.fillText('ELDYN',w/2,logoY+w*.052);
-  ctx.fillStyle='rgba(255,255,255,.92)';ctx.font=`600 ${Math.round(w*.024)}px system-ui`;ctx.fillText('Certified Run',w/2,logoY+w*.086);ctx.textAlign='left';
-  const mapX=pad,mapY=h*.18,mapW=w-pad*2,mapH=Math.min(h*.34,w*.54);
-  ctx.fillStyle='rgba(0,0,0,.44)';ctx.strokeStyle='rgba(255,255,255,.28)';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(mapX,mapY,mapW,mapH,34);ctx.fill();ctx.stroke();
-  const hasRoute=await drawRouteMap(ctx,r.route,mapX+3,mapY+3,mapW-6,mapH-6,31);if(token!==shareRenderToken)return;
-  if(!hasRoute){ctx.fillStyle='rgba(255,255,255,.78)';ctx.font=`700 ${Math.round(w*.028)}px system-ui`;ctx.textAlign='center';ctx.fillText(r.gpsEnabled===false?'PRIVATE RUN · GPS OFF':'NO ROUTE DATA',w/2,mapY+mapH/2);ctx.textAlign='left'}
-  const metricsY=mapY+mapH+h*.065;ctx.fillStyle='#ffffff';ctx.font=`900 ${Math.round(w*.126)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,pad,metricsY);
-  ctx.font=`750 ${Math.round(w*.041)}px system-ui`;ctx.fillText(`${formatClock(r.durationMs)}   ·   AVG ${paceText(r.avgPaceSecKm)}/KM`,pad,metricsY+h*.052);
-  const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim();ctx.font=`550 ${Math.round(w*.033)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.95)';ctx.fillText(caption.slice(0,64),pad,metricsY+h*.115);
-  ctx.font=`650 ${Math.round(w*.024)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.74)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);
-  ctx.textAlign='right';ctx.fillStyle='#b9ff3f';ctx.fillText('Verified by ELDYN',w-pad,h-pad*.92);ctx.textAlign='left';
-  ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)
+  const ratio=shareEls.ratio.value,style=shareEls.style?.value||'photo',sizes={story:[1080,1920],feed:[1080,1350],square:[1080,1080]},[w,h]=sizes[ratio];
+  const c=shareEls.canvas,ctx=c.getContext('2d');c.width=w;c.height=h;const r=shareRunRecord,pad=w*.075;
+  const base=()=>{if(sharePhotoImage)coverImage(ctx,sharePhotoImage,w,h);else{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#121a14');g.addColorStop(1,'#050706');ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}};
+  base();
+  if(style==='map'){ctx.fillStyle='#071007';ctx.fillRect(0,0,w,h);await drawRouteMap(ctx,r.route,pad,h*.16,w-pad*2,h*.49,34)}
+  else if(style==='split'){
+    ctx.fillStyle='#071007';ctx.fillRect(w*.54,0,w*.46,h);await drawRouteMap(ctx,r.route,w*.56,h*.15,w*.39,h*.47,30);if(sharePhotoImage){ctx.save();ctx.beginPath();ctx.rect(0,0,w*.54,h);ctx.clip();coverImage(ctx,sharePhotoImage,w*.54,h);ctx.restore()}else drawRouteOverlay(ctx,r.route,pad,h*.2,w*.40,h*.38);
+  }else{
+    const routeY=h*.20,routeH=h*.38;drawRouteOverlay(ctx,r.route,pad,routeY,w-pad*2,routeH);
+  }
+  if(token!==shareRenderToken)return;
+  const shade=ctx.createLinearGradient(0,0,0,h);shade.addColorStop(0,'rgba(0,0,0,.18)');shade.addColorStop(.48,'rgba(0,0,0,.08)');shade.addColorStop(1,'rgba(0,0,0,.88)');ctx.fillStyle=shade;ctx.fillRect(0,0,w,h);
+  const logoY=pad*.82;ctx.textAlign='center';ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.046)}px system-ui`;ctx.fillText('◇',w/2,logoY);ctx.font=`900 ${Math.round(w*.054)}px system-ui`;ctx.fillText('ELDYN',w/2,logoY+w*.052);ctx.fillStyle='rgba(255,255,255,.92)';ctx.font=`600 ${Math.round(w*.024)}px system-ui`;ctx.fillText('Certified Run',w/2,logoY+w*.086);
+  if(style==='photo'){ctx.fillStyle='rgba(5,9,6,.60)';ctx.beginPath();ctx.roundRect(w*.36,h*.49,w*.28,h*.078,28);ctx.fill();ctx.fillStyle='#fff';ctx.font=`900 ${Math.round(w*.046)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,w/2,h*.543)}
+  ctx.textAlign='left';const metricsY=h*.72;ctx.fillStyle='#fff';ctx.font=`900 ${Math.round(w*.112)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,pad,metricsY);ctx.font=`750 ${Math.round(w*.039)}px system-ui`;ctx.fillText(`${formatClock(r.durationMs)}   ·   AVG ${paceText(r.avgPaceSecKm)}/KM`,pad,metricsY+h*.052);
+  const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim();ctx.font=`550 ${Math.round(w*.032)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.95)';ctx.fillText(caption.slice(0,64),pad,metricsY+h*.113);ctx.font=`650 ${Math.round(w*.023)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.74)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);ctx.textAlign='right';ctx.fillStyle='#b9ff3f';ctx.fillText('Verified by ELDYN',w-pad,h-pad*.92);ctx.textAlign='left';if(style!=='photo'){ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)}
 }
+
 function openShareCard(id){
   shareRunRecord=(state.runs||[]).find(r=>r.id===id);if(!shareRunRecord)return;
   shareEls.caption.value='Today, I showed up. (ง •̀_•́)ง';sharePhotoImage=null;shareEls.photo.value='';renderShareCard();shareEls.dialog.showModal()
 }
 shareEls.photo.addEventListener('change',()=>{const file=shareEls.photo.files?.[0];if(!file)return;const img=new Image();img.onload=()=>{sharePhotoImage=img;renderShareCard();URL.revokeObjectURL(img.src)};img.src=URL.createObjectURL(file)});
-shareEls.ratio.addEventListener('change',()=>renderShareCard());shareEls.caption.addEventListener('input',()=>renderShareCard());shareEls.render.addEventListener('click',()=>renderShareCard());
+shareEls.ratio.addEventListener('change',()=>renderShareCard());shareEls.style?.addEventListener('change',()=>renderShareCard());shareEls.caption.addEventListener('input',()=>renderShareCard());shareEls.render.addEventListener('click',()=>renderShareCard());
 function canvasBlob(){return new Promise(resolve=>shareEls.canvas.toBlob(resolve,'image/png',.95))}
 shareEls.download.addEventListener('click',async()=>{const blob=await canvasBlob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 shareEls.nativeShare.addEventListener('click',async()=>{const blob=await canvasBlob(),file=new File([blob],`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`,{type:'image/png'});if(navigator.canShare?.({files:[file]})){await navigator.share({title:'ELDYN Run',text:'ELDYN Run Certified',files:[file]})}else{alert('Direct sharing is not supported here. Use Save image, then share it from your gallery.')}});
