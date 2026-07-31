@@ -137,16 +137,3 @@ input,select,textarea,button{max-width:100%}
 .share-close-bottom{position:sticky;bottom:max(12px,env(safe-area-inset-bottom));width:100%;min-height:48px;margin-top:12px;border:1px solid var(--line);border-radius:14px;background:#171b18;color:#fff;font-weight:800;z-index:3}
 .share-run-modal form{padding-bottom:max(8px,env(safe-area-inset-bottom))}
 @media(max-width:560px){.live-run-map{height:46vh;min-height:310px}.share-run-modal{max-height:94dvh}.share-close-bottom{min-height:52px}}
-
-/* v5.6 official ELDYN identity + selectable themes */
-:root{--accent:#39ff14;--accent-rgb:57,255,20;--accent-soft:rgba(57,255,20,.14);--accent-ink:#071006}
-html[data-theme="core"]{--accent:#ffffff;--accent-rgb:255,255,255;--accent-soft:rgba(255,255,255,.11);--accent-ink:#050505}
-html[data-theme="paris"]{--accent:#f58fa3;--accent-rgb:245,143,163;--accent-soft:rgba(245,143,163,.14);--accent-ink:#19070d}
-.brand-head{display:flex;align-items:center;gap:14px}.official-header-logo{width:92px;height:62px;object-fit:cover;object-position:center;filter:contrast(1.08)}
-.topbar .slogan,.eyebrow,.accent-text{color:var(--accent)!important}.primary-btn,.run-start-btn{background:var(--accent)!important;color:var(--accent-ink)!important;box-shadow:0 0 24px rgba(var(--accent-rgb),.18)}
-.text-btn,.run-primary-metric strong,.run-score-pill,.gps-badge,.route-panel-head strong{color:var(--accent)}
-.ring{background:conic-gradient(var(--accent) calc(var(--score)*1%),#252925 0)}
-.progress-fill,.nutrition-progress>span{background:var(--accent)!important}.selected,.workout-option.selected,.field-card:focus-within{border-color:var(--accent)!important}
-.live-run-map{box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb),.28)}
-.theme-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0 8px}.theme-option{position:relative;display:grid;grid-template-columns:auto 1fr;gap:2px 9px;align-items:center;padding:14px;border:1px solid #303431;border-radius:16px;background:#111311;cursor:pointer}.theme-option input{position:absolute;opacity:0}.theme-option:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 24px var(--accent-soft)}.theme-option strong,.theme-option small{grid-column:2}.theme-option small{color:#929892}.theme-dot{width:16px;height:16px;border-radius:50%;display:block}.theme-dot.neon{background:#39ff14}.theme-dot.core{background:#fff;border:1px solid #777}.theme-dot.rose{background:#f58fa3}
-@media(max-width:620px){.theme-picker{grid-template-columns:1fr}.official-header-logo{width:76px;height:52px}.brand-head{gap:9px}}

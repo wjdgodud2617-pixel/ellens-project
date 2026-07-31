@@ -1,18 +1,18 @@
 {
-  "version": 2,
   "cleanUrls": true,
   "trailingSlash": false,
   "headers": [
     {
       "source": "/sw.js",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
     },
     {
       "source": "/manifest.webmanifest",
-      "headers": [{ "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" }]
+      "headers": [
+        { "key": "Content-Type", "value": "application/manifest+json" }
+      ]
     }
-  ],
-  "rewrites": [
-    { "source": "/((?!api/|assets/|icons/|app.js|styles.css|config.js|sw.js|manifest.webmanifest).*)", "destination": "/index.html" }
   ]
 }

@@ -1,11 +1,11 @@
 {
-  "name": "ELDYN — Move Forward",
+  "name": "ELDYN",
   "short_name": "ELDYN",
-  "description": "ELDYN performance, running and nutrition app.",
+  "description": "Move Forward. Live GPS running, nutrition and progress.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#050605",
-  "theme_color": "#050605",
+  "background_color": "#0b0d0c",
+  "theme_color": "#0b0d0c",
   "icons": [
     {
       "src": "icons/icon-192.png",

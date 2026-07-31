@@ -1,8 +1,6 @@
 # ELDYN v5 — Nutrition Edition
 
-**Smile. Train. Become the Machine.**
-
-Brand lockup: **Move Forward.**  
+**Move Forward.**  
 **Every Limit Defines Your Next.**
 
 ELDYN v5 is the new baseline release. It retains the existing GPS running, profile, progress, meal logging and Supabase sync features, and standardizes the Nutrition workflow around the deployed `analyze-food` Edge Function.
@@ -33,8 +31,3 @@ The canonical Edge Function source is located at:
 `supabase/functions/analyze-food/index.ts`
 
 Never put the OpenAI API key or Supabase secret/service-role key in GitHub or `config.js`.
-
-
-## v5.6.1
-- Restored the original app slogan: `Smile. Train. Become the Machine.`
-- Kept `Move Forward` only as the ELDYN brand lockup.
