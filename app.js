@@ -257,6 +257,7 @@ function mergeMealPlans(localPlan,remotePlan,preferLocal){
   })
 }
 function mergeRuns(localRuns,remoteRuns){const map=new Map();for(const run of [...(Array.isArray(remoteRuns)?remoteRuns:[]),...(Array.isArray(localRuns)?localRuns:[])]){const key=run?.id||`${run?.startedAt||''}-${run?.endedAt||''}-${run?.distanceKm||0}`;if(key)map.set(key,run)}return [...map.values()].sort((a,b)=>Date.parse(a?.startedAt||0)-Date.parse(b?.startedAt||0))}
+function restoreRunsFromDailyLogs(){let merged=Array.isArray(state.runs)?state.runs:[];for(const log of Object.values(state.logs||{}))merged=mergeRuns(merged,log?.runs);state.runs=merged}
 function mergeDailyLog(localRaw,remoteRaw,remoteUpdatedAt){
   const local=parsePayload(localRaw),remote=parsePayload(remoteRaw),lt=Date.parse(local.updatedAt||0)||0,rt=Date.parse(remote.updatedAt||remoteUpdatedAt||0)||0,preferLocal=lt>=rt;
   const base=preferLocal?{...remote,...local}:{...local,...remote};
@@ -287,6 +288,7 @@ async function cloudSync(show=false){
   let error=null;
   if(rows.length)({error}=await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}));
   if(!error&&futurePlaceholders.length)await supabaseClient.from('daily_logs').delete().eq('user_id',currentUser.id).in('date',futurePlaceholders);
+  restoreRunsFromDailyLogs();
   const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
   syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(show)alert(error?error.message:'Sync complete.');
 }
@@ -304,6 +306,7 @@ async function cloudPull(){
   }
   for(const date of Object.keys(state.logs))if(isFuturePlaceholder(date,state.logs[date]))delete state.logs[date];
   if(futurePlaceholders.length)await supabaseClient.from('daily_logs').delete().eq('user_id',currentUser.id).in('date',futurePlaceholders);
+  restoreRunsFromDailyLogs();
   activeDate=todayKey();selectedDate=todayKey();
   const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
   cloudHydrated=true;render();syncStatus.textContent=futurePlaceholders.length?'Cloud restored · future placeholder removed.':'Cloud data restored.';
@@ -491,7 +494,8 @@ function finishRun(){
       avgPaceSecKm:((movingDurationMs||durationMs)/1000)/distanceKm,calories:runCalories(distanceKm),splits:runSession.splits,
       movingDurationMs,topSpeedKmh:(runSession.topSpeedMps||0)*3.6,route:runSession.route||[],gpsEnabled:runSession.gpsEnabled,autoPauseEnabled:runSession.autoPauseEnabled};
     state.runs=state.runs||[];state.runs.push(record);
-    const log=getLog(todayKey());log.runs=log.runs||[];log.runs.push(record);log.priorities.workout=true;log.updatedAt=new Date().toISOString();saveState();
+    const runDate=todayKey();const log=getLog(runDate);log.runs=mergeRuns(log.runs,[record]);log.priorities.workout=true;log.updatedAt=new Date().toISOString();saveState();
+    saveDailyLogNow(runDate,{verify:false}).catch(()=>{});
     const savedId=record.id;runSession=null;saveActiveRun();renderRun();renderToday();openShareCard(savedId)
   } else {runSession=null;saveActiveRun();renderRun()}
 }
