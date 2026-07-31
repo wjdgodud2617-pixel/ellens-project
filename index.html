@@ -151,6 +151,9 @@
 
       <section id="settings" class="view" aria-label="Settings">
 
+        <div class="section-head"><div><p class="eyebrow">LANGUAGE</p><h2>Language / 언어</h2></div></div>
+        <label class="field-card language-setting-card"><span>언어</span><select id="languageSetting"><option value="ko">한국어</option><option value="en">English</option></select></label>
+
         <div class="section-head"><div><p class="eyebrow">APPEARANCE</p><h2>ELDYN theme</h2></div></div>
         <div class="theme-picker" role="radiogroup" aria-label="ELDYN color theme">
           <label class="theme-option"><input type="radio" name="eldynTheme" value="performance"><span class="theme-dot neon"></span><strong>Performance</strong><small>Neon Green · Default</small></label>
@@ -266,7 +269,8 @@
         <label class="field-card"><span>Photo size</span><input id="sharePhotoSize" type="range" min="100" max="180" value="100" /></label>
       </div>
 
-      <div class="story-studio-note">사진을 선택한 뒤 미리보기에서 손가락이나 마우스로 직접 이동하세요. Photo size로 확대할 수 있어요.</div>
+      <div class="story-studio-note">사진 또는 이동할 텍스트·경로·로고를 미리보기에서 직접 드래그하세요. Photo size로 사진을 확대할 수 있어요.</div>
+      <div class="form-row"><button id="resetStoryLayoutBtn" type="button" class="secondary-btn">Reset layout</button><button id="saveStoryLayoutBtn" type="button" class="secondary-btn">Save layout</button></div>
       <canvas id="shareCanvas" width="1080" height="1350" aria-label="Run share card preview"></canvas>
       <div class="share-actions">
         <button id="renderShareBtn" type="button" class="secondary-btn">Refresh preview</button>
