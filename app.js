@@ -78,7 +78,14 @@ function yesterdayRecommendation(){const y=getLog(shiftDate(activeDate,-1)),name
 const defaults={runs:[],settings:{name:'Ellen',sex:'female',age:37,height:160,currentWeight:78,currentBodyFat:'',goalWeight:74.5,goalMode:'fatloss',activity:1.55,mealCount:4,theme:'performance',waterGoal:2500,sleepGoal:7.5,proteinGoal:125,calorieGoal:1650,carbGoal:165,fatGoal:55},logs:{},body:[],lastCelebrated:{}};
 let state=loadState(),runSession=null,runTimer=null,runWatchId=null,runWakeLock=null,activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null,cloudHydrated=false;
 function todayKey(){return new Date().toLocaleDateString('en-CA')}function clone(v){return JSON.parse(JSON.stringify(v))}function dateFromKey(k){const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d)}function keyFromDate(d){return d.toLocaleDateString('en-CA')}function shiftDate(k,n){const d=dateFromKey(k);d.setDate(d.getDate()+n);return keyFromDate(d)}
-function loadState(){try{const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem('ellens-project-v2')||localStorage.getItem('ellens-project-v1')||'{}',parsed=JSON.parse(raw);return {...clone(defaults),...parsed,settings:{...clone(defaults).settings,...(parsed.settings||{})}}}catch{return clone(defaults)}}function saveState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));scheduleCloudSync()}
+function loadState(){try{const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem('eldyn-pending-state')||localStorage.getItem('ellens-project-v2')||localStorage.getItem('ellens-project-v1')||'{}',parsed=JSON.parse(raw);return {...clone(defaults),...parsed,settings:{...clone(defaults).settings,...(parsed.settings||{})}}}catch{return clone(defaults)}}
+function saveState(){
+  const snapshot=JSON.stringify(state);
+  localStorage.setItem(STORAGE_KEY,snapshot);
+  localStorage.setItem('eldyn-pending-state',snapshot);
+  scheduleCloudSync();
+}
+
 function plannedExercises(date){return clone(weeklyPlan[dateFromKey(date).getDay()].exercises).map(x=>({...x,id:x.id+'-'+date,done:false}))}
 function isLegacyDefaults(list=[]){const names=list.map(x=>x.name).join('|');return names==='Barbell Squat|Seated Cable Row|Easy Run'}
 function getLog(date=activeDate){
@@ -196,18 +203,52 @@ function saveProfileFromForm(){Object.assign(state.settings,{name:displayName.va
 saveProfileBtn.onclick=()=>{saveProfileFromForm();alert('Profile saved.')}
 autoNutritionBtn.onclick=()=>{saveProfileFromForm();const t=calculateNutrition();Object.assign(state.settings,{calorieGoal:t.kcal,proteinGoal:t.protein,carbGoal:t.carb,fatGoal:t.fat,waterGoal:t.water});delete getLog(activeDate).mealPlan;saveState();render();alert('Nutrition targets and today\'s meal plan were created.')}
 regenerateMealsBtn.onclick=()=>{delete getLog(activeDate).mealPlan;saveState();renderMeals(getLog(activeDate))};
-mealPlanList.onclick=e=>{const c=e.target.closest('[data-meal-change]'),d=e.target.closest('[data-meal-done]'),edit=e.target.closest('[data-meal-edit]'),food=e.target.closest('[data-meal-food]'),scan=e.target.closest('[data-meal-scan]'),l=getLog(activeDate),meals=ensureMeals(l,activeDate);if(scan){openFoodScan(+scan.dataset.mealScan);return}else if(food){openFoodEditor(+food.dataset.mealFood);return}else if(edit){const m=meals[+edit.dataset.mealEdit],current=m.customText||mealChoices[m.key][m.choice%mealChoices[m.key].length],value=prompt(`${m.name} 식단 메모를 입력하세요.`,current);if(value===null)return;m.customText=value.trim();if(!m.customText)delete m.customText}else if(c){const m=meals[+c.dataset.mealChange];delete m.customText;m.foodItems=[];m.choice=(m.choice+1)%mealChoices[m.key].length}else if(d){meals[+d.dataset.mealDone].done=!meals[+d.dataset.mealDone].done}else return;syncFoodTotals(l,meals);l.priorities.nutrition=meals.every(x=>x.done);saveState();render()}
+mealPlanList.onclick=e=>{const c=e.target.closest('[data-meal-change]'),d=e.target.closest('[data-meal-done]'),edit=e.target.closest('[data-meal-edit]'),food=e.target.closest('[data-meal-food]'),scan=e.target.closest('[data-meal-scan]'),l=getLog(activeDate),meals=ensureMeals(l,activeDate);if(scan){openFoodScan(+scan.dataset.mealScan);return}else if(food){openFoodEditor(+food.dataset.mealFood);return}else if(edit){const m=meals[+edit.dataset.mealEdit],current=m.customText||mealChoices[m.key][m.choice%mealChoices[m.key].length],value=prompt(`${m.name} 식단 메모를 입력하세요.`,current);if(value===null)return;m.customText=value.trim();if(!m.customText)delete m.customText}else if(c){const m=meals[+c.dataset.mealChange];delete m.customText;m.foodItems=[];m.choice=(m.choice+1)%mealChoices[m.key].length}else if(d){meals[+d.dataset.mealDone].done=!meals[+d.dataset.mealDone].done}else return;syncFoodTotals(l,meals);l.priorities.nutrition=meals.every(x=>x.done);l.updatedAt=new Date().toISOString();saveState();render()}
 saveSettingsBtn.onclick=()=>{const theme=document.querySelector('input[name="eldynTheme"]:checked')?.value||'performance';Object.assign(state.settings,{theme,waterGoal:+waterGoal.value||2000,sleepGoal:+sleepGoal.value||7.5,proteinGoal:+proteinGoal.value||120,calorieGoal:+calorieGoal.value||1800});applyTheme(theme);saveState();render();alert('Theme and targets saved.')};saveBodyBtn.onclick=()=>{state.body=state.body.filter(x=>x.date!==todayKey());state.body.push({date:todayKey(),weight:+weightInput.value||null,bodyFat:+bodyFatInput.value||null,waist:+waistInput.value||null,muscle:+muscleInput.value||null});saveState();alert('Body record saved.')};exportBtn.onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`eldyn-backup-${todayKey()}.json`;a.click();URL.revokeObjectURL(a.href)};importInput.onchange=async e=>{try{state={...clone(defaults),...JSON.parse(await e.target.files[0].text())};saveState();render();alert('Backup imported.')}catch{alert('That backup file could not be read.')}};celebrationClose.onclick=()=>celebrationDialog.close();profileBtn.onclick=()=>accountDialog.showModal();
 async function initSupabase(){const c=window.ELLEN_CONFIG||{},badge=document.getElementById('connectionBadge');if(!c.SUPABASE_URL||!c.SUPABASE_ANON_KEY){syncNowBtn.disabled=true;syncStatus.textContent='Supabase configuration is missing.';return}if(!window.supabase){syncStatus.textContent='Internet connection required.';return}try{supabaseClient=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const{data,error}=await supabaseClient.auth.getSession();if(error)throw error;setUser(data.session?.user||null);supabaseClient.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null))}catch(e){syncStatus.textContent='Cloud connection failed: '+e.message}}
 function setUser(user){currentUser=user;cloudHydrated=false;authTitle.textContent=user?user.email:'Cloud ready';syncStatus.textContent=user?'Loading cloud data…':'Supabase is connected. Create an account or sign in.';authFields.hidden=!!user;signOutBtn.hidden=!user;syncNowBtn.disabled=!user;if(user)cloudPull();}
 signInBtn.onclick=()=>authAction('signin');signUpBtn.onclick=()=>authAction('signup');signOutBtn.onclick=async()=>{await supabaseClient?.auth.signOut();setUser(null)};syncNowBtn.onclick=()=>cloudSync(true);async function authAction(mode){if(!supabaseClient)return alert('Cloud connection is not ready.');const email=emailInput.value.trim(),password=passwordInput.value;if(!email||password.length<6)return alert('Enter an email and a password with at least 6 characters.');const fn=mode==='signup'?'signUp':'signInWithPassword',r=await supabaseClient.auth[fn]({email,password});if(r.error)alert(r.error.message);else alert(mode==='signup'?'Account created. You can sign in now if email confirmation is disabled.':'Signed in. Cloud sync is active.')}
-let syncTimer;function scheduleCloudSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>cloudSync(false),800)}
+let syncTimer,cloudSyncInFlight=null;
+function scheduleCloudSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>cloudSync(false),180)}
+async function flushCloudSync(){clearTimeout(syncTimer);try{await cloudSync(false)}catch{}}
+
 function payloadObject(value){if(!value)return null;if(typeof value==='object')return value;try{return JSON.parse(value)}catch{return null}}
 function timeValue(value){const n=Date.parse(value||'');return Number.isFinite(n)?n:0}
 function mergeCloudLog(local,remote,rowUpdated){const l=local||{},r=remote||{},lt=timeValue(l.updatedAt),rt=timeValue(r.updatedAt||rowUpdated);return rt>=lt?{...l,...r,updatedAt:r.updatedAt||rowUpdated||l.updatedAt}:{...r,...l}}
 function rebuildRunsFromLogs(){const found=new Map();for(const [date,log] of Object.entries(state.logs||{})){for(const run of (log?.runs||[])){if(!run)continue;const id=run.id||[date,run.startedAt,run.endedAt,run.distanceKm].join('|');found.set(id,{...run,id:run.id||id})}}for(const run of (state.runs||[])){if(run){const id=run.id||[run.startedAt,run.endedAt,run.distanceKm].join('|');found.set(id,{...run,id:run.id||id})}}state.runs=[...found.values()].sort((a,b)=>timeValue(a.endedAt)-timeValue(b.endedAt))}
-async function cloudSync(show=false){if(!supabaseClient||!currentUser||!cloudHydrated)return;syncStatus.textContent='Syncing…';const rows=Object.entries(state.logs||{}).map(([date,payload])=>({user_id:currentUser.id,date,payload,updated_at:payload.updatedAt||new Date().toISOString()})),{error}=rows.length?await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}):{error:null};syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(show)alert(error?error.message:'Sync complete.')}
-async function cloudPull(){if(!supabaseClient||!currentUser)return;syncStatus.textContent='Loading cloud data…';const backup={savedAt:new Date().toISOString(),state};localStorage.setItem('eldyn-before-cloud-restore',JSON.stringify(backup));const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);if(error){syncStatus.textContent='Could not load cloud data.';return}let restored=0;for(const row of data||[]){const remote=payloadObject(row?.payload);if(!row?.date||!remote)continue;state.logs[row.date]=mergeCloudLog(state.logs[row.date],remote,row.updated_at);restored++}rebuildRunsFromLogs();localStorage.setItem(STORAGE_KEY,JSON.stringify(state));cloudHydrated=true;render();renderRun();syncStatus.textContent=`Cloud restored · ${restored} day(s) · ${(state.runs||[]).length} run(s).`;}
+async function cloudSync(show=false){
+  if(!supabaseClient||!currentUser||!cloudHydrated)return;
+  if(cloudSyncInFlight)return cloudSyncInFlight;
+  cloudSyncInFlight=(async()=>{
+    syncStatus.textContent='Syncing…';
+    const now=new Date().toISOString();
+    const rows=Object.entries(state.logs||{}).map(([date,payload])=>({user_id:currentUser.id,date,payload,updated_at:payload.updatedAt||now}));
+    const {error}=rows.length?await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}):{error:null};
+    if(!error)localStorage.removeItem('eldyn-pending-state');
+    syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';
+    if(show)alert(error?error.message:'Sync complete.');
+    return !error;
+  })();
+  try{return await cloudSyncInFlight}finally{cloudSyncInFlight=null}
+}
+async function cloudPull(){
+  if(!supabaseClient||!currentUser)return;
+  syncStatus.textContent='Loading cloud data…';
+  const backup={savedAt:new Date().toISOString(),state};
+  localStorage.setItem('eldyn-before-cloud-restore',JSON.stringify(backup));
+  const pending=payloadObject(localStorage.getItem('eldyn-pending-state'));
+  if(pending?.logs){for(const [date,log] of Object.entries(pending.logs))state.logs[date]=mergeCloudLog(state.logs[date],log,log?.updatedAt)}
+  const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);
+  if(error){syncStatus.textContent='Could not load cloud data.';return}
+  let restored=0;
+  for(const row of data||[]){const remote=payloadObject(row?.payload);if(!row?.date||!remote)continue;state.logs[row.date]=mergeCloudLog(state.logs[row.date],remote,row.updated_at);restored++}
+  rebuildRunsFromLogs();
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  cloudHydrated=true;
+  render();renderRun();
+  syncStatus.textContent=`Cloud restored · ${restored} day(s) · ${(state.runs||[]).length} run(s).`;
+  await flushCloudSync();
+}
 
 
 // ELDYN live running + privacy + share card
@@ -226,8 +267,8 @@ const shareEls={
   download:document.getElementById('downloadShareBtn'),nativeShare:document.getElementById('nativeShareBtn'),textSize:document.getElementById('shareTextSize'),routeSize:document.getElementById('shareRouteSize'),logoSize:document.getElementById('shareLogoSize'),resetLayout:document.getElementById('resetStoryLayoutBtn'),saveLayout:document.getElementById('saveStoryLayoutBtn')
 };
 let shareRunRecord=null,sharePhotoImage=null,shareDrag=null,shareBounds={};
-const defaultStoryLayout={logo:{x:.50,y:.08},route:{x:.20,y:.49},metrics:{x:.075,y:.72},caption:{x:.075,y:.826}};
-function storyLayout(){const s=state.settings.storyLayout||{};return {logo:{...defaultStoryLayout.logo,...s.logo},route:{...defaultStoryLayout.route,...s.route},metrics:{...defaultStoryLayout.metrics,...s.metrics},caption:{...defaultStoryLayout.caption,...s.caption}}}
+const defaultStoryLayout={logo:{x:.50,y:.085},route:{x:.20,y:.49},metrics:{x:.075,y:.72},caption:{x:.075,y:.826},footer:{x:.925,y:.955}};
+function storyLayout(){const s=state.settings.storyLayout||{};return {logo:{...defaultStoryLayout.logo,...s.logo},route:{...defaultStoryLayout.route,...s.route},metrics:{...defaultStoryLayout.metrics,...s.metrics},caption:{...defaultStoryLayout.caption,...s.caption},footer:{...defaultStoryLayout.footer,...s.footer}}}
 function clamp01(n,min=.03,max=.97){return Math.max(min,Math.min(max,n))}
 function pointInBounds(x,y,b){return b&&x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h}
 function sharePointerPoint(e){const r=shareEls.canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*shareEls.canvas.width/r.width,y:(e.clientY-r.top)*shareEls.canvas.height/r.height}}
@@ -418,17 +459,26 @@ async function renderShareCard(){
   if(token!==shareRenderToken)return;
   if(style!=='photo'){const shade=ctx.createLinearGradient(0,0,0,h);shade.addColorStop(0,'rgba(0,0,0,.18)');shade.addColorStop(.48,'rgba(0,0,0,.08)');shade.addColorStop(1,'rgba(0,0,0,.88)');ctx.fillStyle=shade;ctx.fillRect(0,0,w,h)}
   if(style==='photo'){const routeW=w*.32*routeScale,routeH=h*.18*routeScale,routeX=L.route.x*w-routeW/2,routeY=L.route.y*h-routeH/2;drawRouteOverlay(ctx,r.route,routeX,routeY,routeW,routeH,true);shareBounds.route={x:routeX,y:routeY,w:routeW,h:routeH}}
-  const logoX=L.logo.x*w,logoY=L.logo.y*h;ctx.textAlign='center';ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.07*logoScale)}px system-ui`;ctx.fillText('ELDYN',logoX,logoY);ctx.font=`700 ${Math.round(w*.018*logoScale)}px system-ui`;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()||'#39ff14';ctx.fillText('MOVE FORWARD',logoX,logoY+w*.034*logoScale);ctx.font=`700 ${Math.round(w*.015*logoScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.72)';ctx.fillText('SMILE. TRAIN. BECOME THE MACHINE.',logoX,logoY+w*.064*logoScale);shareBounds.logo={x:logoX-w*.25*logoScale,y:logoY-w*.07*logoScale,w:w*.5*logoScale,h:w*.15*logoScale};
+  const logoX=L.logo.x*w,logoY=L.logo.y*h;ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,.96)';ctx.font=`900 ${Math.round(w*.034*logoScale)}px system-ui`;ctx.fillText('ELDYN',logoX,logoY);shareBounds.logo={x:logoX-w*.10*logoScale,y:logoY-w*.042*logoScale,w:w*.20*logoScale,h:w*.060*logoScale};
   const metricsX=L.metrics.x*w,metricsY=L.metrics.y*h;ctx.textAlign='left';ctx.fillStyle='#fff';ctx.shadowColor='rgba(0,0,0,.38)';ctx.shadowBlur=4;ctx.font=`900 ${Math.round(w*.100*textScale)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,metricsX,metricsY);ctx.font=`750 ${Math.round(w*.035*textScale)}px system-ui`;ctx.fillText(`${formatClock(r.durationMs)}   ·   AVG ${paceText(r.avgPaceSecKm)}/KM`,metricsX,metricsY+h*.050);shareBounds.metrics={x:metricsX-w*.02,y:metricsY-w*.11*textScale,w:w*.82,h:h*.09};
   const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim(),captionX=L.caption.x*w,captionY=L.caption.y*h;ctx.font=`550 ${Math.round(w*.028*textScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.96)';ctx.fillText(caption.slice(0,64),captionX,captionY);shareBounds.caption={x:captionX-w*.02,y:captionY-w*.04,w:w*.82,h:w*.06};
-  ctx.font=`650 ${Math.round(w*.019*textScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.82)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);ctx.textAlign='right';ctx.fillStyle='#b9ff3f';ctx.fillText('Verified by ELDYN',w-pad,h-pad*.92);ctx.shadowBlur=0;ctx.textAlign='left';if(style!=='photo'){ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)}
+  ctx.font=`650 ${Math.round(w*.019*textScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.82)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);const footerX=L.footer.x*w,footerY=L.footer.y*h;ctx.textAlign='right';ctx.fillStyle='rgba(255,255,255,.88)';ctx.font=`800 ${Math.round(w*.018*logoScale)}px system-ui`;ctx.fillText('ELDYN',footerX,footerY);shareBounds.footer={x:footerX-w*.14*logoScale,y:footerY-w*.030*logoScale,w:w*.15*logoScale,h:w*.045*logoScale};ctx.shadowBlur=0;ctx.textAlign='left';if(style!=='photo'){ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)}
 }
 function openShareCard(id){
   shareRunRecord=(state.runs||[]).find(r=>r.id===id);if(!shareRunRecord)return;
   shareEls.caption.value='Today, I showed up. (ง •̀_•́)ง';sharePhotoImage=null;shareEls.photo.value='';renderShareCard();shareEls.dialog.showModal()
 }
-shareEls.canvas.addEventListener('pointerdown',e=>{const p=sharePointerPoint(e);const order=['caption','metrics','logo','route'];const key=order.find(k=>pointInBounds(p.x,p.y,shareBounds[k]));if(!key)return;shareDrag={key,start:p,origin:{...storyLayout()[key]}};shareEls.canvas.setPointerCapture?.(e.pointerId);shareEls.canvas.classList.add('dragging');e.preventDefault()});
-shareEls.canvas.addEventListener('pointermove',e=>{if(!shareDrag)return;const p=sharePointerPoint(e),dx=(p.x-shareDrag.start.x)/shareEls.canvas.width,dy=(p.y-shareDrag.start.y)/shareEls.canvas.height;state.settings.storyLayout=state.settings.storyLayout||{};state.settings.storyLayout[shareDrag.key]={x:clamp01(shareDrag.origin.x+dx),y:clamp01(shareDrag.origin.y+dy)};renderShareCard();e.preventDefault()});
+shareEls.canvas.addEventListener('pointerdown',e=>{const p=sharePointerPoint(e);const order=['caption','metrics','logo','route','footer'];const key=order.find(k=>pointInBounds(p.x,p.y,shareBounds[k]));if(!key)return;shareDrag={key,start:p,origin:{...storyLayout()[key]}};shareEls.canvas.setPointerCapture?.(e.pointerId);shareEls.canvas.classList.add('dragging');e.preventDefault()});
+shareEls.canvas.addEventListener('pointermove',e=>{
+  if(!shareDrag)return;
+  const p=sharePointerPoint(e),dx=(p.x-shareDrag.start.x)/shareEls.canvas.width,dy=(p.y-shareDrag.start.y)/shareEls.canvas.height;
+  let x=clamp01(shareDrag.origin.x+dx),y=clamp01(shareDrag.origin.y+dy);
+  const snap=.018,guides=[.075,.5,.925];
+  for(const g of guides){if(Math.abs(x-g)<snap)x=g;if(Math.abs(y-g)<snap)y=g}
+  state.settings.storyLayout=state.settings.storyLayout||{};
+  state.settings.storyLayout[shareDrag.key]={x,y};
+  renderShareCard();e.preventDefault()
+});
 function stopShareDrag(){if(!shareDrag)return;shareDrag=null;shareEls.canvas.classList.remove('dragging');saveState()}
 shareEls.canvas.addEventListener('pointerup',stopShareDrag);shareEls.canvas.addEventListener('pointercancel',stopShareDrag);
 shareEls.resetLayout?.addEventListener('click',()=>{state.settings.storyLayout=JSON.parse(JSON.stringify(defaultStoryLayout));saveState();renderShareCard()});
@@ -439,7 +489,10 @@ function canvasBlob(){return new Promise(resolve=>shareEls.canvas.toBlob(resolve
 shareEls.download.addEventListener('click',async()=>{const blob=await canvasBlob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 shareEls.nativeShare.addEventListener('click',async()=>{const blob=await canvasBlob(),file=new File([blob],`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`,{type:'image/png'});if(navigator.canShare?.({files:[file]})){await navigator.share({title:'ELDYN Run',text:'ELDYN Run Certified',files:[file]})}else{alert('Direct sharing is not supported here. Use Save image, then share it from your gallery.')}});
 runEls.start.onclick=beginRun;runEls.pause.onclick=togglePause;runEls.finish.onclick=finishRun;runEls.gpsToggle.addEventListener('change',renderRun);runEls.autoPause.addEventListener('change',renderRun);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&runSession?.status==='running')requestWakeLock();saveActiveRun()});window.addEventListener('pagehide',saveActiveRun);window.addEventListener('beforeunload',saveActiveRun);setInterval(()=>{if(runSession)saveActiveRun()},5000);restoreActiveRun();
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&runSession?.status==='running')requestWakeLock();saveActiveRun();if(document.visibilityState==='hidden')flushCloudSync()});
+window.addEventListener('pagehide',()=>{saveActiveRun();flushCloudSync()});
+window.addEventListener('beforeunload',()=>{saveActiveRun();flushCloudSync()});
+window.addEventListener('online',()=>flushCloudSync());setInterval(()=>{if(runSession)saveActiveRun()},5000);restoreActiveRun();
 
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;installBtn.hidden=false});installBtn.onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;installBtn.hidden=true}};if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));initSupabase();render();renderRun();
 
