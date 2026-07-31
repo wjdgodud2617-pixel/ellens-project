@@ -77,13 +77,34 @@ const workoutCatalog={
 function workoutPlanByKey(key){const [category,plan]=String(key||'').split(':');return workoutCatalog[category]?.plans?.[plan]||null}
 function yesterdayRecommendation(){const y=getLog(shiftDate(activeDate,-1)),name=(y.planName||'').toLowerCase();if(name.includes('hyrox')||name.includes('interval')||name.includes('metcon'))return 'recovery:mobility';if(name.includes('lower'))return 'strength:upper';if(name.includes('upper'))return 'running:easy';return 'strength:fullbody'}
 const defaults={runs:[],settings:{name:'Ellen',sex:'female',age:37,height:160,currentWeight:78,currentBodyFat:'',goalWeight:74.5,goalMode:'fatloss',activity:1.55,mealCount:4,theme:'performance',waterGoal:2500,sleepGoal:7.5,proteinGoal:125,calorieGoal:1650,carbGoal:165,fatGoal:55},logs:{},body:[],lastCelebrated:{}};
+const APP_TIME_ZONE='Asia/Seoul';
 let state=loadState(),runSession=null,runTimer=null,runWatchId=null,runWakeLock=null,activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null,cloudHydrated=false;
-function todayKey(){return new Date().toLocaleDateString('en-CA')}function clone(v){return JSON.parse(JSON.stringify(v))}function dateFromKey(k){const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d)}function keyFromDate(d){return d.toLocaleDateString('en-CA')}function shiftDate(k,n){const d=dateFromKey(k);d.setDate(d.getDate()+n);return keyFromDate(d)}
+function zonedDateKey(value=new Date()){
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:APP_TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(value);
+  const pick=t=>parts.find(x=>x.type===t)?.value;
+  return `${pick('year')}-${pick('month')}-${pick('day')}`;
+}
+function todayKey(){return zonedDateKey(new Date())}
+function clone(v){return JSON.parse(JSON.stringify(v))}
+function dateFromKey(k){const [y,m,d]=String(k).split('-').map(Number);return new Date(y,m-1,d,12,0,0,0)}
+function keyFromDate(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function shiftDate(k,n){const d=dateFromKey(k);d.setDate(d.getDate()+n);return keyFromDate(d)}
+function isFutureDateKey(k){return String(k)>todayKey()}
+function hasMeaningfulMealData(plan){return (Array.isArray(plan)?plan:[]).some(m=>m?.done||String(m?.customText||'').trim()||(Array.isArray(m?.foodItems)&&m.foodItems.length>0))}
+function isMeaningfulLog(log){
+  if(!log||typeof log!=='object')return false;
+  if((Array.isArray(log.runs)&&log.runs.length)||hasMeaningfulMealData(log.mealPlan))return true;
+  if(String(log.memo||'').trim()||(+log.water||0)>0||(+log.sleep||0)>0||(+log.calories||0)>0||(+log.protein||0)>0||(+log.carbs||0)>0||(+log.fat||0)>0)return true;
+  if(Object.values(log.priorities||{}).some(Boolean))return true;
+  if((Array.isArray(log.exercises)&&log.exercises.some(x=>x?.done))||(!['weekly',undefined,null].includes(log.planSource)))return true;
+  return false;
+}
+function isFuturePlaceholder(date,log){return isFutureDateKey(date)&&!isMeaningfulLog(log)}
 function stateTimestamp(value){const times=Object.values(value?.logs||{}).map(x=>Date.parse(x?.updatedAt||0)||0);return Math.max(0,...times)}
 function loadState(){try{const candidates=[localStorage.getItem(STORAGE_KEY),localStorage.getItem(STORAGE_BACKUP_KEY),localStorage.getItem('ellens-project-v2'),localStorage.getItem('ellens-project-v1')].filter(Boolean).map(raw=>JSON.parse(raw));const parsed=candidates.sort((a,b)=>stateTimestamp(b)-stateTimestamp(a))[0]||{};return {...clone(defaults),...parsed,settings:{...clone(defaults).settings,...(parsed.settings||{})}}}catch{return clone(defaults)}}
 function saveState(){const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);scheduleCloudSync()}
 function markLogChanged(date=activeDate){const log=getLog(date);log.updatedAt=new Date().toISOString();saveState();return log}
-async function saveDailyLogNow(date=activeDate,{verify=true}={}){if(!supabaseClient||!currentUser||!cloudHydrated)return false;const local=state.logs[date];if(!local)return false;syncStatus.textContent='Saving meal…';for(let attempt=0;attempt<2;attempt++){const {data:remoteRows,error:readError}=await supabaseClient.from('daily_logs').select('payload,updated_at').eq('user_id',currentUser.id).eq('date',date).limit(1);if(readError)continue;const remote=remoteRows?.[0];const merged=mergeDailyLog(local,remote?.payload||{},remote?.updated_at);const {error}=await supabaseClient.from('daily_logs').upsert({user_id:currentUser.id,date,payload:merged,updated_at:merged.updatedAt},{onConflict:'user_id,date'});if(error)continue;state.logs[date]=merged;const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);if(!verify){syncStatus.textContent='Saved to cloud.';return true}const {data:check,error:checkError}=await supabaseClient.from('daily_logs').select('payload').eq('user_id',currentUser.id).eq('date',date).limit(1);const saved=parsePayload(check?.[0]?.payload);if(!checkError&&mealPlansEquivalent(merged.mealPlan,saved.mealPlan)){syncStatus.textContent='✓ Meal saved to cloud';return true}}syncStatus.textContent='Meal save pending — tap Sync';return false}
+async function saveDailyLogNow(date=activeDate,{verify=true}={}){if(!supabaseClient||!currentUser||!cloudHydrated)return false;const local=state.logs[date];if(!local||isFuturePlaceholder(date,local))return false;syncStatus.textContent='Saving meal…';for(let attempt=0;attempt<2;attempt++){const {data:remoteRows,error:readError}=await supabaseClient.from('daily_logs').select('payload,updated_at').eq('user_id',currentUser.id).eq('date',date).limit(1);if(readError)continue;const remote=remoteRows?.[0];const merged=mergeDailyLog(local,remote?.payload||{},remote?.updated_at);const {error}=await supabaseClient.from('daily_logs').upsert({user_id:currentUser.id,date,payload:merged,updated_at:merged.updatedAt},{onConflict:'user_id,date'});if(error)continue;state.logs[date]=merged;const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);if(!verify){syncStatus.textContent='Saved to cloud.';return true}const {data:check,error:checkError}=await supabaseClient.from('daily_logs').select('payload').eq('user_id',currentUser.id).eq('date',date).limit(1);const saved=parsePayload(check?.[0]?.payload);if(!checkError&&mealPlansEquivalent(merged.mealPlan,saved.mealPlan)){syncStatus.textContent='✓ Meal saved to cloud';return true}}syncStatus.textContent='Meal save pending — tap Sync';return false}
 function mealPlansEquivalent(a,b){const clean=v=>(Array.isArray(v)?v:[]).map(m=>({key:m?.key||'',done:!!m?.done,customText:m?.customText||'',foodItems:(Array.isArray(m?.foodItems)?m.foodItems:[]).map(x=>({name:x?.name||'',amount:+x?.amount||0,unit:x?.unit||'',kcal:+x?.kcal||0,protein:+x?.protein||0,carbs:+x?.carbs||0,fat:+x?.fat||0}))}));return JSON.stringify(clean(a))===JSON.stringify(clean(b))}
 function plannedExercises(date){return clone(weeklyPlan[dateFromKey(date).getDay()].exercises).map(x=>({...x,id:x.id+'-'+date,done:false}))}
 function isLegacyDefaults(list=[]){const names=list.map(x=>x.name).join('|');return names==='Barbell Squat|Seated Cable Row|Easy Run'}
@@ -208,13 +229,85 @@ async function initSupabase(){const c=window.ELLEN_CONFIG||{},badge=document.get
 function setUser(user){currentUser=user;cloudHydrated=false;authTitle.textContent=user?user.email:'Cloud ready';syncStatus.textContent=user?'Loading cloud data…':'Supabase is connected. Create an account or sign in.';authFields.hidden=!!user;signOutBtn.hidden=!user;syncNowBtn.disabled=!user;if(user)cloudPull();}
 signInBtn.onclick=()=>authAction('signin');signUpBtn.onclick=()=>authAction('signup');signOutBtn.onclick=async()=>{await supabaseClient?.auth.signOut();setUser(null)};syncNowBtn.onclick=()=>cloudSync(true);async function authAction(mode){if(!supabaseClient)return alert('Cloud connection is not ready.');const email=emailInput.value.trim(),password=passwordInput.value;if(!email||password.length<6)return alert('Enter an email and a password with at least 6 characters.');const fn=mode==='signup'?'signUp':'signInWithPassword',r=await supabaseClient.auth[fn]({email,password});if(r.error)alert(r.error.message);else alert(mode==='signup'?'Account created. You can sign in now if email confirmation is disabled.':'Signed in. Cloud sync is active.')}
 function parsePayload(payload){if(!payload)return{};if(typeof payload==='string'){try{return JSON.parse(payload)}catch{return{}}}return payload}
-function mealHasUserData(meal){return !!(meal?.done||meal?.customText?.trim()||(Array.isArray(meal?.foodItems)&&meal.foodItems.length))}
-function mergeMealPlans(localPlan,remotePlan,preferLocal){const local=Array.isArray(localPlan)?localPlan:[],remote=Array.isArray(remotePlan)?remotePlan:[];const keys=[...new Set([...local,...remote].map(x=>x?.key).filter(Boolean))];if(!keys.length)return preferLocal?local:remote;return keys.map(key=>{const l=local.find(x=>x?.key===key),r=remote.find(x=>x?.key===key);if(!l)return clone(r);if(!r)return clone(l);const primary=preferLocal?l:r,secondary=preferLocal?r:l;const merged={...secondary,...primary};const lf=Array.isArray(l.foodItems)?l.foodItems:[],rf=Array.isArray(r.foodItems)?r.foodItems:[];if(lf.length||rf.length){const source=lf.length&&rf.length?(preferLocal?lf:rf):(lf.length?lf:rf);merged.foodItems=clone(source)}const lc=(l.customText||'').trim(),rc=(r.customText||'').trim();if(lc||rc)merged.customText=preferLocal?(lc||rc):(rc||lc);merged.done=!!(l.done||r.done);return merged})}
+function mealHasUserData(meal){return !!(meal?.done||String(meal?.customText||'').trim()||(Array.isArray(meal?.foodItems)&&meal.foodItems.length))}
+function mealHasFoodItems(meal){return Array.isArray(meal?.foodItems)&&meal.foodItems.length>0}
+function mergeMealPlans(localPlan,remotePlan,preferLocal){
+  const local=Array.isArray(localPlan)?localPlan:[],remote=Array.isArray(remotePlan)?remotePlan:[];
+  const keys=[...new Set([...local,...remote].map(x=>x?.key).filter(Boolean))];
+  if(!keys.length)return clone(preferLocal?local:remote);
+  return keys.map(key=>{
+    const l=local.find(x=>x?.key===key),r=remote.find(x=>x?.key===key);
+    if(!l)return clone(r);if(!r)return clone(l);
+    const lUser=mealHasUserData(l),rUser=mealHasUserData(r);
+    // A blank/default meal must never overwrite a meal containing actual user input.
+    let primary,secondary;
+    if(lUser&&!rUser){primary=l;secondary=r}
+    else if(rUser&&!lUser){primary=r;secondary=l}
+    else{primary=preferLocal?l:r;secondary=preferLocal?r:l}
+    const merged={...secondary,...primary};
+    const lf=Array.isArray(l.foodItems)?l.foodItems:[],rf=Array.isArray(r.foodItems)?r.foodItems:[];
+    if(lf.length||rf.length){
+      if(lf.length&&!rf.length)merged.foodItems=clone(lf);
+      else if(rf.length&&!lf.length)merged.foodItems=clone(rf);
+      else merged.foodItems=clone(preferLocal?lf:rf);
+    }
+    const lc=String(l.customText||'').trim(),rc=String(r.customText||'').trim();
+    if(lc||rc)merged.customText=(primary===l?(lc||rc):(rc||lc));
+    return merged;
+  })
+}
 function mergeRuns(localRuns,remoteRuns){const map=new Map();for(const run of [...(Array.isArray(remoteRuns)?remoteRuns:[]),...(Array.isArray(localRuns)?localRuns:[])]){const key=run?.id||`${run?.startedAt||''}-${run?.endedAt||''}-${run?.distanceKm||0}`;if(key)map.set(key,run)}return [...map.values()].sort((a,b)=>Date.parse(a?.startedAt||0)-Date.parse(b?.startedAt||0))}
-function mergeDailyLog(localRaw,remoteRaw,remoteUpdatedAt){const local=parsePayload(localRaw),remote=parsePayload(remoteRaw),lt=Date.parse(local.updatedAt||0)||0,rt=Date.parse(remote.updatedAt||remoteUpdatedAt||0)||0,preferLocal=lt>=rt;const base=preferLocal?{...remote,...local}:{...local,...remote};base.mealPlan=mergeMealPlans(local.mealPlan,remote.mealPlan,preferLocal);base.runs=mergeRuns(local.runs,remote.runs);const totals=dailyFoodTotals(base.mealPlan||[]);base.calories=Math.round(totals.kcal||0);base.protein=Math.round(totals.protein||0);base.carbs=Math.round(totals.carbs||0);base.fat=Math.round(totals.fat||0);const latest=Math.max(lt,rt);base.updatedAt=new Date(latest||Date.now()).toISOString();return base}
+function mergeDailyLog(localRaw,remoteRaw,remoteUpdatedAt){
+  const local=parsePayload(localRaw),remote=parsePayload(remoteRaw),lt=Date.parse(local.updatedAt||0)||0,rt=Date.parse(remote.updatedAt||remoteUpdatedAt||0)||0,preferLocal=lt>=rt;
+  const base=preferLocal?{...remote,...local}:{...local,...remote};
+  base.mealPlan=mergeMealPlans(local.mealPlan,remote.mealPlan,preferLocal);
+  base.runs=mergeRuns(local.runs,remote.runs);
+  // Recalculate nutrition only when detailed foods exist. Legacy aggregate values must not be zeroed.
+  if((base.mealPlan||[]).some(mealHasFoodItems)){
+    const totals=dailyFoodTotals(base.mealPlan||[]);
+    base.calories=Math.round(totals.kcal||0);base.protein=Math.round(totals.protein||0);base.carbs=Math.round(totals.carbs||0);base.fat=Math.round(totals.fat||0);
+  }else{
+    const preferred=preferLocal?local:remote,secondary=preferLocal?remote:local;
+    for(const key of ['calories','protein','carbs','fat'])base[key]=Number(preferred[key]??secondary[key]??0)||0;
+  }
+  const latest=Math.max(lt,rt);base.updatedAt=new Date(latest||Date.now()).toISOString();return base
+}
 let syncTimer;function scheduleCloudSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>cloudSync(false),500)}
-async function cloudSync(show=false){if(!supabaseClient||!currentUser||!cloudHydrated)return;syncStatus.textContent='Syncing…';const{data:remoteRows,error:readError}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);if(readError){syncStatus.textContent='Sync failed: '+readError.message;if(show)alert(readError.message);return}const remoteMap=new Map((remoteRows||[]).map(row=>[row.date,row]));const dates=new Set([...Object.keys(state.logs),...remoteMap.keys()]);const rows=[];for(const date of dates){const remote=remoteMap.get(date),merged=mergeDailyLog(state.logs[date]||{},remote?.payload||{},remote?.updated_at);state.logs[date]=merged;rows.push({user_id:currentUser.id,date,payload:merged,updated_at:merged.updatedAt})}const{error}=rows.length?await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}):{error:null};const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(show)alert(error?error.message:'Sync complete.')}
-async function cloudPull(){if(!supabaseClient||!currentUser)return;syncStatus.textContent='Loading cloud data…';const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);if(error){syncStatus.textContent='Could not load cloud data.';return}for(const row of data||[]){if(!row?.date||!row?.payload)continue;state.logs[row.date]=mergeDailyLog(state.logs[row.date]||{},row.payload,row.updated_at)}const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);cloudHydrated=true;render();syncStatus.textContent='Cloud data restored.';}
+async function cloudSync(show=false){
+  if(!supabaseClient||!currentUser||!cloudHydrated)return;
+  syncStatus.textContent='Syncing…';
+  const{data:remoteRows,error:readError}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);
+  if(readError){syncStatus.textContent='Sync failed: '+readError.message;if(show)alert(readError.message);return}
+  const remoteMap=new Map((remoteRows||[]).map(row=>[row.date,row])),dates=new Set([...Object.keys(state.logs),...remoteMap.keys()]),rows=[],futurePlaceholders=[];
+  for(const date of dates){
+    const remote=remoteMap.get(date),merged=mergeDailyLog(state.logs[date]||{},remote?.payload||{},remote?.updated_at);
+    if(isFuturePlaceholder(date,merged)){delete state.logs[date];if(remote)futurePlaceholders.push(date);continue}
+    state.logs[date]=merged;rows.push({user_id:currentUser.id,date,payload:merged,updated_at:merged.updatedAt});
+  }
+  let error=null;
+  if(rows.length)({error}=await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}));
+  if(!error&&futurePlaceholders.length)await supabaseClient.from('daily_logs').delete().eq('user_id',currentUser.id).in('date',futurePlaceholders);
+  const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
+  syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(show)alert(error?error.message:'Sync complete.');
+}
+async function cloudPull(){
+  if(!supabaseClient||!currentUser)return;
+  syncStatus.textContent='Loading cloud data…';
+  const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);
+  if(error){syncStatus.textContent='Could not load cloud data.';return}
+  const futurePlaceholders=[];
+  for(const row of data||[]){
+    if(!row?.date||!row?.payload)continue;
+    const merged=mergeDailyLog(state.logs[row.date]||{},row.payload,row.updated_at);
+    if(isFuturePlaceholder(row.date,merged)){delete state.logs[row.date];futurePlaceholders.push(row.date);continue}
+    state.logs[row.date]=merged;
+  }
+  for(const date of Object.keys(state.logs))if(isFuturePlaceholder(date,state.logs[date]))delete state.logs[date];
+  if(futurePlaceholders.length)await supabaseClient.from('daily_logs').delete().eq('user_id',currentUser.id).in('date',futurePlaceholders);
+  activeDate=todayKey();selectedDate=todayKey();
+  const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
+  cloudHydrated=true;render();syncStatus.textContent=futurePlaceholders.length?'Cloud restored · future placeholder removed.':'Cloud data restored.';
+}
 
 
 // ELDYN live running + privacy + share card
