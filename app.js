@@ -323,9 +323,9 @@ const runEls={
 const shareEls={
   dialog:document.getElementById('shareRunDialog'),photo:document.getElementById('sharePhotoInput'),ratio:document.getElementById('shareRatioSelect'),style:document.getElementById('shareStyleSelect'),
   caption:document.getElementById('shareCaptionInput'),canvas:document.getElementById('shareCanvas'),render:document.getElementById('renderShareBtn'),
-  download:document.getElementById('downloadShareBtn'),nativeShare:document.getElementById('nativeShareBtn'),textSize:document.getElementById('shareTextSize'),routeSize:document.getElementById('shareRouteSize'),logoSize:document.getElementById('shareLogoSize')
+  download:document.getElementById('downloadShareBtn'),nativeShare:document.getElementById('nativeShareBtn'),textSize:document.getElementById('shareTextSize'),routeSize:document.getElementById('shareRouteSize'),logoSize:document.getElementById('shareLogoSize'),photoSize:document.getElementById('sharePhotoSize')
 };
-let shareRunRecord=null,sharePhotoImage=null;
+let shareRunRecord=null,sharePhotoImage=null,sharePhotoTransform={x:0,y:0,zoom:1},sharePhotoDrag=null;
 const ACTIVE_RUN_KEY='eldyn-active-run-v4';
 function saveActiveRun(){if(!runSession){localStorage.removeItem(ACTIVE_RUN_KEY);return}const snap={...runSession,savedAt:Date.now()};localStorage.setItem(ACTIVE_RUN_KEY,JSON.stringify(snap))}
 function restoreActiveRun(){try{const r=JSON.parse(localStorage.getItem(ACTIVE_RUN_KEY)||'null');if(!r||Date.now()-(r.savedAt||0)>12*3600e3)return localStorage.removeItem(ACTIVE_RUN_KEY);runSession=r;if(r.status==='running'){runSession.elapsedBefore=(r.elapsedBefore||0)+Math.max(0,Date.now()-(r.segmentStartedAt||Date.now()));runSession.segmentStartedAt=Date.now();runSession.lastPoint=null;runSession.status='paused';runSession.autoPaused=false}runEls.gpsToggle.checked=!!runSession.gpsEnabled;runEls.autoPause.checked=runSession.autoPauseEnabled!==false;runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000)}catch{localStorage.removeItem(ACTIVE_RUN_KEY)}}
@@ -495,7 +495,7 @@ function finishRun(){
     const savedId=record.id;runSession=null;saveActiveRun();renderRun();renderToday();openShareCard(savedId)
   } else {runSession=null;saveActiveRun();renderRun()}
 }
-function coverImage(ctx,img,w,h){const scale=Math.max(w/img.width,h/img.height),sw=w/scale,sh=h/scale,sx=(img.width-sw)/2,sy=(img.height-sh)/2;ctx.drawImage(img,sx,sy,sw,sh,0,0,w,h)}
+function coverImage(ctx,img,w,h){const zoom=Math.max(1,sharePhotoTransform.zoom||1),scale=Math.max(w/img.width,h/img.height)*zoom,sw=w/scale,sh=h/scale,maxX=Math.max(0,(img.width-sw)/2),maxY=Math.max(0,(img.height-sh)/2),sx=Math.max(0,Math.min(img.width-sw,(img.width-sw)/2-(sharePhotoTransform.x||0)*maxX)),sy=Math.max(0,Math.min(img.height-sh,(img.height-sh)/2-(sharePhotoTransform.y||0)*maxY));ctx.drawImage(img,sx,sy,sw,sh,0,0,w,h)}
 function mercatorWorld(lat,lon,zoom){
   const scale=256*Math.pow(2,zoom),clamped=Math.max(-85.0511,Math.min(85.0511,lat)),sin=Math.sin(clamped*Math.PI/180);
   return{x:(lon+180)/360*scale,y:(.5-Math.log((1+sin)/(1-sin))/(4*Math.PI))*scale}
@@ -559,10 +559,13 @@ async function renderShareCard(){
 
 function openShareCard(id){
   shareRunRecord=(state.runs||[]).find(r=>r.id===id);if(!shareRunRecord)return;
-  shareEls.caption.value='Today, I showed up. (ง •̀_•́)ง';sharePhotoImage=null;shareEls.photo.value='';renderShareCard();shareEls.dialog.showModal()
+  shareEls.caption.value='Today, I showed up. (ง •̀_•́)ง';sharePhotoImage=null;sharePhotoTransform={x:0,y:0,zoom:1};if(shareEls.photoSize)shareEls.photoSize.value='100';shareEls.photo.value='';renderShareCard();shareEls.dialog.showModal()
 }
-shareEls.photo.addEventListener('change',()=>{const file=shareEls.photo.files?.[0];if(!file)return;const img=new Image();img.onload=()=>{sharePhotoImage=img;renderShareCard();URL.revokeObjectURL(img.src)};img.src=URL.createObjectURL(file)});
-shareEls.ratio.addEventListener('change',()=>renderShareCard());shareEls.style?.addEventListener('change',()=>renderShareCard());shareEls.caption.addEventListener('input',()=>renderShareCard());[shareEls.textSize,shareEls.routeSize,shareEls.logoSize].forEach(el=>el?.addEventListener('input',()=>renderShareCard()));shareEls.render.addEventListener('click',()=>renderShareCard());
+shareEls.photo.addEventListener('change',()=>{const file=shareEls.photo.files?.[0];if(!file)return;const img=new Image();img.onload=()=>{sharePhotoImage=img;sharePhotoTransform={x:0,y:0,zoom:(+shareEls.photoSize?.value||100)/100};renderShareCard();URL.revokeObjectURL(img.src)};img.src=URL.createObjectURL(file)});
+shareEls.ratio.addEventListener('change',()=>renderShareCard());shareEls.style?.addEventListener('change',()=>renderShareCard());shareEls.caption.addEventListener('input',()=>renderShareCard());[shareEls.textSize,shareEls.routeSize,shareEls.logoSize].forEach(el=>el?.addEventListener('input',()=>renderShareCard()));shareEls.photoSize?.addEventListener('input',()=>{sharePhotoTransform.zoom=(+shareEls.photoSize.value||100)/100;renderShareCard()});shareEls.render.addEventListener('click',()=>renderShareCard());
+shareEls.canvas.addEventListener('pointerdown',e=>{if(!sharePhotoImage)return;const r=shareEls.canvas.getBoundingClientRect();sharePhotoDrag={x:e.clientX,y:e.clientY,startX:sharePhotoTransform.x,startY:sharePhotoTransform.y,w:r.width,h:r.height};shareEls.canvas.setPointerCapture?.(e.pointerId);shareEls.canvas.classList.add('dragging');e.preventDefault()});
+shareEls.canvas.addEventListener('pointermove',e=>{if(!sharePhotoDrag)return;const dx=(e.clientX-sharePhotoDrag.x)/Math.max(1,sharePhotoDrag.w),dy=(e.clientY-sharePhotoDrag.y)/Math.max(1,sharePhotoDrag.h);sharePhotoTransform.x=Math.max(-1,Math.min(1,sharePhotoDrag.startX+dx*2));sharePhotoTransform.y=Math.max(-1,Math.min(1,sharePhotoDrag.startY+dy*2));renderShareCard();e.preventDefault()});
+function stopSharePhotoDrag(){sharePhotoDrag=null;shareEls.canvas.classList.remove('dragging')}shareEls.canvas.addEventListener('pointerup',stopSharePhotoDrag);shareEls.canvas.addEventListener('pointercancel',stopSharePhotoDrag);
 function canvasBlob(){return new Promise(resolve=>shareEls.canvas.toBlob(resolve,'image/png',.95))}
 shareEls.download.addEventListener('click',async()=>{const blob=await canvasBlob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 shareEls.nativeShare.addEventListener('click',async()=>{const blob=await canvasBlob(),file=new File([blob],`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`,{type:'image/png'});if(navigator.canShare?.({files:[file]})){await navigator.share({title:'ELDYN Run',text:'ELDYN Run Certified',files:[file]})}else{alert('Direct sharing is not supported here. Use Save image, then share it from your gallery.')}});
