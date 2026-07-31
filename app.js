@@ -1,4 +1,5 @@
 const STORAGE_KEY='eldyn-project-v3';
+const STORAGE_BACKUP_KEY='eldyn-project-v3-safe-backup';
 const ex=(id,name,sets,reps,weight,target,instructions,search)=>({id,name,sets,reps,weight,done:false,target,instructions,youtube:'',search});
 const weeklyPlan={
   0:{name:'Recovery & Mobility',exercises:[ex('sun-walk','Recovery Walk',1,30,0,'Cardiovascular recovery','Walk at an easy pace. Keep your breathing relaxed.','recovery walk workout'),ex('sun-mobility','Full Body Mobility',1,15,0,'Hips · Shoulders · Spine','Move slowly through a comfortable range. Do not force painful positions.','15 minute full body mobility')]},
@@ -78,14 +79,9 @@ function yesterdayRecommendation(){const y=getLog(shiftDate(activeDate,-1)),name
 const defaults={runs:[],settings:{name:'Ellen',sex:'female',age:37,height:160,currentWeight:78,currentBodyFat:'',goalWeight:74.5,goalMode:'fatloss',activity:1.55,mealCount:4,theme:'performance',waterGoal:2500,sleepGoal:7.5,proteinGoal:125,calorieGoal:1650,carbGoal:165,fatGoal:55},logs:{},body:[],lastCelebrated:{}};
 let state=loadState(),runSession=null,runTimer=null,runWatchId=null,runWakeLock=null,activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null,cloudHydrated=false;
 function todayKey(){return new Date().toLocaleDateString('en-CA')}function clone(v){return JSON.parse(JSON.stringify(v))}function dateFromKey(k){const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d)}function keyFromDate(d){return d.toLocaleDateString('en-CA')}function shiftDate(k,n){const d=dateFromKey(k);d.setDate(d.getDate()+n);return keyFromDate(d)}
-function loadState(){try{const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem('eldyn-pending-state')||localStorage.getItem('ellens-project-v2')||localStorage.getItem('ellens-project-v1')||'{}',parsed=JSON.parse(raw);return {...clone(defaults),...parsed,settings:{...clone(defaults).settings,...(parsed.settings||{})}}}catch{return clone(defaults)}}
-function saveState(){
-  const snapshot=JSON.stringify(state);
-  localStorage.setItem(STORAGE_KEY,snapshot);
-  localStorage.setItem('eldyn-pending-state',snapshot);
-  scheduleCloudSync();
-}
-
+function stateTimestamp(value){const times=Object.values(value?.logs||{}).map(x=>Date.parse(x?.updatedAt||0)||0);return Math.max(0,...times)}
+function loadState(){try{const candidates=[localStorage.getItem(STORAGE_KEY),localStorage.getItem(STORAGE_BACKUP_KEY),localStorage.getItem('ellens-project-v2'),localStorage.getItem('ellens-project-v1')].filter(Boolean).map(raw=>JSON.parse(raw));const parsed=candidates.sort((a,b)=>stateTimestamp(b)-stateTimestamp(a))[0]||{};return {...clone(defaults),...parsed,settings:{...clone(defaults).settings,...(parsed.settings||{})}}}catch{return clone(defaults)}}
+function saveState(){const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);scheduleCloudSync()}
 function plannedExercises(date){return clone(weeklyPlan[dateFromKey(date).getDay()].exercises).map(x=>({...x,id:x.id+'-'+date,done:false}))}
 function isLegacyDefaults(list=[]){const names=list.map(x=>x.name).join('|');return names==='Barbell Squat|Seated Cable Row|Easy Run'}
 function getLog(date=activeDate){
@@ -208,47 +204,14 @@ saveSettingsBtn.onclick=()=>{const theme=document.querySelector('input[name="eld
 async function initSupabase(){const c=window.ELLEN_CONFIG||{},badge=document.getElementById('connectionBadge');if(!c.SUPABASE_URL||!c.SUPABASE_ANON_KEY){syncNowBtn.disabled=true;syncStatus.textContent='Supabase configuration is missing.';return}if(!window.supabase){syncStatus.textContent='Internet connection required.';return}try{supabaseClient=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const{data,error}=await supabaseClient.auth.getSession();if(error)throw error;setUser(data.session?.user||null);supabaseClient.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null))}catch(e){syncStatus.textContent='Cloud connection failed: '+e.message}}
 function setUser(user){currentUser=user;cloudHydrated=false;authTitle.textContent=user?user.email:'Cloud ready';syncStatus.textContent=user?'Loading cloud data…':'Supabase is connected. Create an account or sign in.';authFields.hidden=!!user;signOutBtn.hidden=!user;syncNowBtn.disabled=!user;if(user)cloudPull();}
 signInBtn.onclick=()=>authAction('signin');signUpBtn.onclick=()=>authAction('signup');signOutBtn.onclick=async()=>{await supabaseClient?.auth.signOut();setUser(null)};syncNowBtn.onclick=()=>cloudSync(true);async function authAction(mode){if(!supabaseClient)return alert('Cloud connection is not ready.');const email=emailInput.value.trim(),password=passwordInput.value;if(!email||password.length<6)return alert('Enter an email and a password with at least 6 characters.');const fn=mode==='signup'?'signUp':'signInWithPassword',r=await supabaseClient.auth[fn]({email,password});if(r.error)alert(r.error.message);else alert(mode==='signup'?'Account created. You can sign in now if email confirmation is disabled.':'Signed in. Cloud sync is active.')}
-let syncTimer,cloudSyncInFlight=null;
-function scheduleCloudSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>cloudSync(false),180)}
-async function flushCloudSync(){clearTimeout(syncTimer);try{await cloudSync(false)}catch{}}
-
-function payloadObject(value){if(!value)return null;if(typeof value==='object')return value;try{return JSON.parse(value)}catch{return null}}
-function timeValue(value){const n=Date.parse(value||'');return Number.isFinite(n)?n:0}
-function mergeCloudLog(local,remote,rowUpdated){const l=local||{},r=remote||{},lt=timeValue(l.updatedAt),rt=timeValue(r.updatedAt||rowUpdated);return rt>=lt?{...l,...r,updatedAt:r.updatedAt||rowUpdated||l.updatedAt}:{...r,...l}}
-function rebuildRunsFromLogs(){const found=new Map();for(const [date,log] of Object.entries(state.logs||{})){for(const run of (log?.runs||[])){if(!run)continue;const id=run.id||[date,run.startedAt,run.endedAt,run.distanceKm].join('|');found.set(id,{...run,id:run.id||id})}}for(const run of (state.runs||[])){if(run){const id=run.id||[run.startedAt,run.endedAt,run.distanceKm].join('|');found.set(id,{...run,id:run.id||id})}}state.runs=[...found.values()].sort((a,b)=>timeValue(a.endedAt)-timeValue(b.endedAt))}
-async function cloudSync(show=false){
-  if(!supabaseClient||!currentUser||!cloudHydrated)return;
-  if(cloudSyncInFlight)return cloudSyncInFlight;
-  cloudSyncInFlight=(async()=>{
-    syncStatus.textContent='Syncing…';
-    const now=new Date().toISOString();
-    const rows=Object.entries(state.logs||{}).map(([date,payload])=>({user_id:currentUser.id,date,payload,updated_at:payload.updatedAt||now}));
-    const {error}=rows.length?await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}):{error:null};
-    if(!error)localStorage.removeItem('eldyn-pending-state');
-    syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';
-    if(show)alert(error?error.message:'Sync complete.');
-    return !error;
-  })();
-  try{return await cloudSyncInFlight}finally{cloudSyncInFlight=null}
-}
-async function cloudPull(){
-  if(!supabaseClient||!currentUser)return;
-  syncStatus.textContent='Loading cloud data…';
-  const backup={savedAt:new Date().toISOString(),state};
-  localStorage.setItem('eldyn-before-cloud-restore',JSON.stringify(backup));
-  const pending=payloadObject(localStorage.getItem('eldyn-pending-state'));
-  if(pending?.logs){for(const [date,log] of Object.entries(pending.logs))state.logs[date]=mergeCloudLog(state.logs[date],log,log?.updatedAt)}
-  const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);
-  if(error){syncStatus.textContent='Could not load cloud data.';return}
-  let restored=0;
-  for(const row of data||[]){const remote=payloadObject(row?.payload);if(!row?.date||!remote)continue;state.logs[row.date]=mergeCloudLog(state.logs[row.date],remote,row.updated_at);restored++}
-  rebuildRunsFromLogs();
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-  cloudHydrated=true;
-  render();renderRun();
-  syncStatus.textContent=`Cloud restored · ${restored} day(s) · ${(state.runs||[]).length} run(s).`;
-  await flushCloudSync();
-}
+function parsePayload(payload){if(!payload)return{};if(typeof payload==='string'){try{return JSON.parse(payload)}catch{return{}}}return payload}
+function mealHasUserData(meal){return !!(meal?.done||meal?.customText?.trim()||(Array.isArray(meal?.foodItems)&&meal.foodItems.length))}
+function mergeMealPlans(localPlan,remotePlan,preferLocal){const local=Array.isArray(localPlan)?localPlan:[],remote=Array.isArray(remotePlan)?remotePlan:[];const keys=[...new Set([...local,...remote].map(x=>x?.key).filter(Boolean))];if(!keys.length)return preferLocal?local:remote;return keys.map(key=>{const l=local.find(x=>x?.key===key),r=remote.find(x=>x?.key===key);if(!l)return r;if(!r)return l;const lh=mealHasUserData(l),rh=mealHasUserData(r);if(lh&&!rh)return l;if(rh&&!lh)return r;return preferLocal?{...r,...l}:{...l,...r}})}
+function mergeRuns(localRuns,remoteRuns){const map=new Map();for(const run of [...(Array.isArray(remoteRuns)?remoteRuns:[]),...(Array.isArray(localRuns)?localRuns:[])]){const key=run?.id||`${run?.startedAt||''}-${run?.endedAt||''}-${run?.distanceKm||0}`;if(key)map.set(key,run)}return [...map.values()].sort((a,b)=>Date.parse(a?.startedAt||0)-Date.parse(b?.startedAt||0))}
+function mergeDailyLog(localRaw,remoteRaw,remoteUpdatedAt){const local=parsePayload(localRaw),remote=parsePayload(remoteRaw),lt=Date.parse(local.updatedAt||0)||0,rt=Date.parse(remote.updatedAt||remoteUpdatedAt||0)||0,preferLocal=lt>=rt;const base=preferLocal?{...remote,...local}:{...local,...remote};base.mealPlan=mergeMealPlans(local.mealPlan,remote.mealPlan,preferLocal);base.runs=mergeRuns(local.runs,remote.runs);const totals=dailyFoodTotals(base.mealPlan||[]);if(totals.kcal>0){base.calories=Math.round(totals.kcal);base.protein=Math.round(totals.protein);base.carbs=Math.round(totals.carbs);base.fat=Math.round(totals.fat)}base.updatedAt=new Date(Math.max(lt,rt,Date.now())).toISOString();return base}
+let syncTimer;function scheduleCloudSync(){clearTimeout(syncTimer);syncTimer=setTimeout(()=>cloudSync(false),500)}
+async function cloudSync(show=false){if(!supabaseClient||!currentUser||!cloudHydrated)return;syncStatus.textContent='Syncing…';const{data:remoteRows,error:readError}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);if(readError){syncStatus.textContent='Sync failed: '+readError.message;if(show)alert(readError.message);return}const remoteMap=new Map((remoteRows||[]).map(row=>[row.date,row]));const dates=new Set([...Object.keys(state.logs),...remoteMap.keys()]);const rows=[];for(const date of dates){const remote=remoteMap.get(date),merged=mergeDailyLog(state.logs[date]||{},remote?.payload||{},remote?.updated_at);state.logs[date]=merged;rows.push({user_id:currentUser.id,date,payload:merged,updated_at:merged.updatedAt})}const{error}=rows.length?await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}):{error:null};const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(show)alert(error?error.message:'Sync complete.')}
+async function cloudPull(){if(!supabaseClient||!currentUser)return;syncStatus.textContent='Loading cloud data…';const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);if(error){syncStatus.textContent='Could not load cloud data.';return}for(const row of data||[]){if(!row?.date||!row?.payload)continue;state.logs[row.date]=mergeDailyLog(state.logs[row.date]||{},row.payload,row.updated_at)}const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);cloudHydrated=true;render();syncStatus.textContent='Cloud data restored.';}
 
 
 // ELDYN live running + privacy + share card
@@ -259,20 +222,14 @@ const runEls={
   splits:document.getElementById('runSplits'),history:document.getElementById('runHistory'),start:document.getElementById('startRunBtn'),
   pause:document.getElementById('pauseRunBtn'),finish:document.getElementById('finishRunBtn'),gpsToggle:document.getElementById('gpsEnabledToggle'),
   autoPause:document.getElementById('autoPauseToggle'),movingTime:document.getElementById('runMovingTime'),topSpeed:document.getElementById('runTopSpeed'),
-  quality:document.getElementById('gpsQuality'),map:document.getElementById('liveRunMap'),mapDistance:document.getElementById('mapRunDistance'),mapPace:document.getElementById('mapRunPace'),mapTime:document.getElementById('mapRunTime')
+  quality:document.getElementById('gpsQuality'),map:document.getElementById('liveRunMap')
 };
 const shareEls={
   dialog:document.getElementById('shareRunDialog'),photo:document.getElementById('sharePhotoInput'),ratio:document.getElementById('shareRatioSelect'),style:document.getElementById('shareStyleSelect'),
   caption:document.getElementById('shareCaptionInput'),canvas:document.getElementById('shareCanvas'),render:document.getElementById('renderShareBtn'),
-  download:document.getElementById('downloadShareBtn'),nativeShare:document.getElementById('nativeShareBtn'),textSize:document.getElementById('shareTextSize'),routeSize:document.getElementById('shareRouteSize'),logoSize:document.getElementById('shareLogoSize'),resetLayout:document.getElementById('resetStoryLayoutBtn'),saveLayout:document.getElementById('saveStoryLayoutBtn')
+  download:document.getElementById('downloadShareBtn'),nativeShare:document.getElementById('nativeShareBtn'),textSize:document.getElementById('shareTextSize'),routeSize:document.getElementById('shareRouteSize'),logoSize:document.getElementById('shareLogoSize')
 };
-let shareRunRecord=null,sharePhotoImage=null,shareDrag=null,shareBounds={};
-const defaultStoryLayout={logo:{x:.50,y:.085},route:{x:.20,y:.49},metrics:{x:.075,y:.72},caption:{x:.075,y:.826},footer:{x:.925,y:.955}};
-function storyLayout(){const s=state.settings.storyLayout||{};return {logo:{...defaultStoryLayout.logo,...s.logo},route:{...defaultStoryLayout.route,...s.route},metrics:{...defaultStoryLayout.metrics,...s.metrics},caption:{...defaultStoryLayout.caption,...s.caption},footer:{...defaultStoryLayout.footer,...s.footer}}}
-function clamp01(n,min=.03,max=.97){return Math.max(min,Math.min(max,n))}
-function pointInBounds(x,y,b){return b&&x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h}
-function sharePointerPoint(e){const r=shareEls.canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*shareEls.canvas.width/r.width,y:(e.clientY-r.top)*shareEls.canvas.height/r.height}}
-
+let shareRunRecord=null,sharePhotoImage=null;
 const ACTIVE_RUN_KEY='eldyn-active-run-v4';
 function saveActiveRun(){if(!runSession){localStorage.removeItem(ACTIVE_RUN_KEY);return}const snap={...runSession,savedAt:Date.now()};localStorage.setItem(ACTIVE_RUN_KEY,JSON.stringify(snap))}
 function restoreActiveRun(){try{const r=JSON.parse(localStorage.getItem(ACTIVE_RUN_KEY)||'null');if(!r||Date.now()-(r.savedAt||0)>12*3600e3)return localStorage.removeItem(ACTIVE_RUN_KEY);runSession=r;if(r.status==='running'){runSession.elapsedBefore=(r.elapsedBefore||0)+Math.max(0,Date.now()-(r.segmentStartedAt||Date.now()));runSession.segmentStartedAt=Date.now();runSession.lastPoint=null;runSession.status='paused';runSession.autoPaused=false}runEls.gpsToggle.checked=!!runSession.gpsEnabled;runEls.autoPause.checked=runSession.autoPauseEnabled!==false;runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000)}catch{localStorage.removeItem(ACTIVE_RUN_KEY)}}
@@ -314,8 +271,8 @@ function runningScore(run){if(!run||!run.distanceKm)return 0;const pace=run.avgP
 function renderLatestRunAnalysis(){const el=document.getElementById('latestRunAnalysis');if(!el)return;const runs=(state.runs||[]).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));const r=runs[0];if(!r){el.innerHTML='<div class="empty-state"><span>🏃</span><p>Complete a run to see pace, speed and performance insights here.</p></div>';return}const previous=runs[1],bestSplit=(r.splits||[]).map(x=>+x.seconds).filter(Number.isFinite).sort((a,b)=>a-b)[0],bestPace=bestSplit||r.avgPaceSecKm,avgSpeed=Number.isFinite(r.avgPaceSecKm)&&r.avgPaceSecKm>0?3600/r.avgPaceSecKm:0,delta=previous&&Number.isFinite(previous.avgPaceSecKm)?Math.round(previous.avgPaceSecKm-r.avgPaceSecKm):null,trend=delta===null?'첫 기록이 저장되었습니다.':delta>0?`이전 기록보다 ${delta}초/km 빨라졌어요.`:delta<0?`이전 기록보다 ${Math.abs(delta)}초/km 느려졌어요.`:'이전 기록과 같은 평균 페이스예요.';el.innerHTML=`<div class="latest-run-head"><div><p class="eyebrow">${new Date(r.endedAt).toLocaleDateString()}</p><h3>${r.distanceKm.toFixed(2)} km run</h3></div><span class="run-score-pill">${runningScore(r)} SCORE</span></div><div class="run-analysis-grid"><div><span>AVERAGE PACE</span><strong>${paceText(r.avgPaceSecKm)}</strong><small>/km</small></div><div><span>BEST PACE</span><strong>${paceText(bestPace)}</strong><small>/km</small></div><div><span>AVERAGE SPEED</span><strong>${avgSpeed.toFixed(1)}</strong><small>km/h</small></div><div><span>CALORIES</span><strong>${r.calories||0}</strong><small>kcal</small></div></div><p class="run-trend">${trend}</p>`}
 function runCalories(distanceKm){const weight=+state.settings.currentWeight||78;return Math.round(distanceKm*weight)}
 function renderRun(){
-  const r=runSession,d=r?r.distanceM/1000:0,ms=r?elapsedMs():0,avg=d>0?(ms/1000)/d:Infinity;
-  runEls.time.textContent=formatClock(ms);runEls.distance.textContent=d.toFixed(2);runEls.averagePace.textContent=paceText(avg);if(runEls.mapTime)runEls.mapTime.textContent=formatClock(ms);if(runEls.mapDistance)runEls.mapDistance.textContent=d.toFixed(2);if(runEls.mapPace)runEls.mapPace.textContent=paceText(avg)+' /km';
+  const r=runSession,d=r?r.distanceM/1000:0,ms=r?elapsedMs():0,avg=d>0?(ms/1000)/d:Infinity;updateRunDocumentTitle();
+  runEls.time.textContent=formatClock(ms);runEls.distance.textContent=d.toFixed(2);runEls.averagePace.textContent=paceText(avg);
   runEls.movingTime.textContent=formatClock(r?movingMs():0);runEls.topSpeed.textContent=((r?.topSpeedMps||0)*3.6).toFixed(1);runEls.quality.textContent=r?.gpsEnabled?gpsQualityLabel(r?.accuracy):'GPS OFF';drawLiveRoute();
   runEls.currentPace.textContent=paceText(r?.currentPace||Infinity);runEls.calories.textContent=runCalories(d);
   runEls.accuracy.textContent=r?.gpsEnabled?(r?.accuracy?Math.round(r.accuracy):'--'):'OFF';
@@ -341,8 +298,44 @@ function renderRun(){
   runEls.history.innerHTML=history.length?history.map(x=>`<div class="run-history-card"><div><h3>${new Date(x.endedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</h3><p>${formatClock(x.durationMs)} · ${paceText(x.avgPaceSecKm)}/km · ${x.calories} kcal ${x.gpsEnabled===false?'· GPS OFF':''}</p></div><div class="run-history-actions"><strong class="history-distance">${x.distanceKm.toFixed(2)} km</strong><button class="mini-edit share-run-btn" data-run-id="${x.id}">Share card</button></div></div>`).join(''):'<div class="empty-state"><span>👟</span><p>No completed runs yet.</p></div>';
   runEls.history.querySelectorAll('.share-run-btn').forEach(btn=>btn.addEventListener('click',()=>openShareCard(btn.dataset.runId)));
 }
-async function requestWakeLock(){try{if('wakeLock'in navigator)runWakeLock=await navigator.wakeLock.request('screen')}catch{}}
+async function requestWakeLock(){try{if('wakeLock'in navigator&&document.visibilityState==='visible')runWakeLock=await navigator.wakeLock.request('screen')}catch{}}
 function releaseWakeLock(){try{runWakeLock?.release()}catch{}runWakeLock=null}
+const RUN_NOTICE_TAG='eldyn-active-run';
+function runNoticeBody(){
+  if(!runSession)return 'ELDYN running session';
+  const km=((runSession.distanceM||0)/1000).toFixed(2),time=formatClock(elapsedMs()),pace=paceText(km>0?(elapsedMs()/1000)/(+km):Infinity);
+  return `${km} km · ${time} · ${pace}/km`;
+}
+async function requestRunNoticePermission(){
+  try{
+    if(!('Notification'in window))return false;
+    if(Notification.permission==='granted')return true;
+    if(Notification.permission==='default')return (await Notification.requestPermission())==='granted';
+  }catch{}
+  return false;
+}
+async function showRunCompanionNotification(force=false){
+  if(!runSession||runSession.status!=='running')return;
+  try{
+    if(!force&&document.visibilityState==='visible')return;
+    if(!('serviceWorker'in navigator)||!('Notification'in window)||Notification.permission!=='granted')return;
+    const reg=await navigator.serviceWorker.ready;
+    const payload={type:'ELDYN_RUN_STATUS',title:'ELDYN · Run in progress',body:runNoticeBody(),url:location.href};
+    if(reg.active)reg.active.postMessage(payload);
+    else await reg.showNotification(payload.title,{body:payload.body,tag:RUN_NOTICE_TAG,icon:'./icons/icon-192.png',badge:'./icons/icon-192.png',silent:true,renotify:false,requireInteraction:true,data:{url:payload.url}});
+    if('setAppBadge'in navigator)await navigator.setAppBadge(1);
+  }catch{}
+}
+async function clearRunCompanionNotification(){
+  try{
+    if('serviceWorker'in navigator){const reg=await navigator.serviceWorker.ready;(await reg.getNotifications({tag:RUN_NOTICE_TAG})).forEach(n=>n.close())}
+    if('clearAppBadge'in navigator)await navigator.clearAppBadge();
+  }catch{}
+}
+function updateRunDocumentTitle(){
+  if(runSession?.status==='running')document.title=`${((runSession.distanceM||0)/1000).toFixed(2)} km · ${formatClock(elapsedMs())} · ELDYN`;
+  else document.title='ELDYN — Move Forward';
+}
 function startGps(){if(!runSession?.gpsEnabled)return;if(!navigator.geolocation){return gpsError({message:'This browser does not support GPS.'})}runWatchId=navigator.geolocation.watchPosition(onGps,gpsError,{enableHighAccuracy:true,maximumAge:500,timeout:15000})}
 function stopGps(){if(runWatchId!==null)navigator.geolocation.clearWatch(runWatchId);runWatchId=null}
 function onGps(pos){
@@ -379,12 +372,12 @@ function beginRun(){
   const gpsEnabled=runEls.gpsToggle.checked;
   if(gpsEnabled&&!window.isSecureContext)return alert('GPS requires HTTPS. Open the Vercel URL, or switch GPS off.');
   runSession={status:'running',gpsEnabled,autoPauseEnabled:runEls.autoPause.checked,autoPaused:false,startedAt:new Date().toISOString(),segmentStartedAt:Date.now(),elapsedBefore:0,movingMs:0,movingSegmentAt:Date.now(),distanceM:0,lastPoint:null,currentPace:Infinity,topSpeedMps:0,accuracy:null,hasFix:false,speedSamples:[],splits:[],route:[]};saveActiveRun();
-  if(gpsEnabled)startGps();requestWakeLock();runTimer=setInterval(renderRun,1000);renderRun()
+  if(gpsEnabled)startGps();requestWakeLock();requestRunNoticePermission().then(ok=>{if(ok)showRunCompanionNotification(true)});runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000);renderRun()
 }
 function togglePause(){
   if(!runSession)return;
-  if(runSession.status==='running'){runSession.elapsedBefore=elapsedMs();if(runSession.movingSegmentAt){runSession.movingMs=movingMs();runSession.movingSegmentAt=null}runSession.status='paused';runSession.autoPaused=false;runSession.lastPoint=null;stopGps();releaseWakeLock();saveActiveRun()}
-  else{runSession.status='running';runSession.segmentStartedAt=Date.now();runSession.movingSegmentAt=Date.now();if(runSession.gpsEnabled)startGps();requestWakeLock();saveActiveRun()}
+  if(runSession.status==='running'){runSession.elapsedBefore=elapsedMs();if(runSession.movingSegmentAt){runSession.movingMs=movingMs();runSession.movingSegmentAt=null}runSession.status='paused';runSession.autoPaused=false;runSession.lastPoint=null;stopGps();releaseWakeLock();clearRunCompanionNotification();saveActiveRun()}
+  else{runSession.status='running';runSession.segmentStartedAt=Date.now();runSession.movingSegmentAt=Date.now();if(runSession.gpsEnabled)startGps();requestWakeLock();showRunCompanionNotification(true);saveActiveRun()}
   renderRun()
 }
 function finishRun(){
@@ -396,7 +389,7 @@ function finishRun(){
     if(manual===null)return;
     distanceKm=Math.max(0,Number(String(manual).replace(',','.'))||0);
   }
-  stopGps();releaseWakeLock();clearInterval(runTimer);runTimer=null;
+  stopGps();releaseWakeLock();clearRunCompanionNotification();clearInterval(runTimer);runTimer=null;
   if(distanceKm>=.02){
     const record={id:crypto.randomUUID(),startedAt:runSession.startedAt,endedAt:new Date().toISOString(),durationMs,distanceKm,
       avgPaceSecKm:((movingDurationMs||durationMs)/1000)/distanceKm,calories:runCalories(distanceKm),splits:runSession.splits,
@@ -452,47 +445,45 @@ let shareRenderToken=0;
 async function renderShareCard(){
   if(!shareRunRecord)return;const token=++shareRenderToken;
   const ratio=shareEls.ratio.value,style=shareEls.style?.value||'photo',textScale=(+shareEls.textSize?.value||88)/100,routeScale=(+shareEls.routeSize?.value||80)/100,logoScale=(+shareEls.logoSize?.value||88)/100,sizes={story:[1080,1920],feed:[1080,1350],square:[1080,1080]},[w,h]=sizes[ratio];
-  const c=shareEls.canvas,ctx=c.getContext('2d');c.width=w;c.height=h;const r=shareRunRecord,pad=w*.075,L=storyLayout();shareBounds={};
-  const base=()=>{if(sharePhotoImage)coverImage(ctx,sharePhotoImage,w,h);else{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#121a14');g.addColorStop(1,'#050706');ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}};base();
+  const c=shareEls.canvas,ctx=c.getContext('2d');c.width=w;c.height=h;const r=shareRunRecord,pad=w*.075;
+  const base=()=>{if(sharePhotoImage)coverImage(ctx,sharePhotoImage,w,h);else{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#121a14');g.addColorStop(1,'#050706');ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}};
+  base();
   if(style==='map'){ctx.fillStyle='#071007';ctx.fillRect(0,0,w,h);await drawRouteMap(ctx,r.route,pad,h*.16,w-pad*2,h*.49,34)}
-  else if(style==='split'){ctx.fillStyle='#071007';ctx.fillRect(w*.54,0,w*.46,h);await drawRouteMap(ctx,r.route,w*.56,h*.15,w*.39,h*.47,30);if(sharePhotoImage){ctx.save();ctx.beginPath();ctx.rect(0,0,w*.54,h);ctx.clip();coverImage(ctx,sharePhotoImage,w*.54,h);ctx.restore()}}
+  else if(style==='split'){
+    ctx.fillStyle='#071007';ctx.fillRect(w*.54,0,w*.46,h);await drawRouteMap(ctx,r.route,w*.56,h*.15,w*.39,h*.47,30);if(sharePhotoImage){ctx.save();ctx.beginPath();ctx.rect(0,0,w*.54,h);ctx.clip();coverImage(ctx,sharePhotoImage,w*.54,h);ctx.restore()}else drawRouteOverlay(ctx,r.route,pad,h*.2,w*.40,h*.38);
+  }else{
+    const metricsY=h*.72,routeW=w*.32*routeScale,routeH=h*.18*routeScale,routeX=pad,routeY=metricsY-routeH-h*.035;drawRouteOverlay(ctx,r.route,routeX,routeY,routeW,routeH,true);
+  }
   if(token!==shareRenderToken)return;
   if(style!=='photo'){const shade=ctx.createLinearGradient(0,0,0,h);shade.addColorStop(0,'rgba(0,0,0,.18)');shade.addColorStop(.48,'rgba(0,0,0,.08)');shade.addColorStop(1,'rgba(0,0,0,.88)');ctx.fillStyle=shade;ctx.fillRect(0,0,w,h)}
-  if(style==='photo'){const routeW=w*.32*routeScale,routeH=h*.18*routeScale,routeX=L.route.x*w-routeW/2,routeY=L.route.y*h-routeH/2;drawRouteOverlay(ctx,r.route,routeX,routeY,routeW,routeH,true);shareBounds.route={x:routeX,y:routeY,w:routeW,h:routeH}}
-  const logoX=L.logo.x*w,logoY=L.logo.y*h;ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,.96)';ctx.font=`900 ${Math.round(w*.034*logoScale)}px system-ui`;ctx.fillText('ELDYN',logoX,logoY);shareBounds.logo={x:logoX-w*.10*logoScale,y:logoY-w*.042*logoScale,w:w*.20*logoScale,h:w*.060*logoScale};
-  const metricsX=L.metrics.x*w,metricsY=L.metrics.y*h;ctx.textAlign='left';ctx.fillStyle='#fff';ctx.shadowColor='rgba(0,0,0,.38)';ctx.shadowBlur=4;ctx.font=`900 ${Math.round(w*.100*textScale)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,metricsX,metricsY);ctx.font=`750 ${Math.round(w*.035*textScale)}px system-ui`;ctx.fillText(`${formatClock(r.durationMs)}   ·   AVG ${paceText(r.avgPaceSecKm)}/KM`,metricsX,metricsY+h*.050);shareBounds.metrics={x:metricsX-w*.02,y:metricsY-w*.11*textScale,w:w*.82,h:h*.09};
-  const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim(),captionX=L.caption.x*w,captionY=L.caption.y*h;ctx.font=`550 ${Math.round(w*.028*textScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.96)';ctx.fillText(caption.slice(0,64),captionX,captionY);shareBounds.caption={x:captionX-w*.02,y:captionY-w*.04,w:w*.82,h:w*.06};
-  ctx.font=`650 ${Math.round(w*.019*textScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.82)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);const footerX=L.footer.x*w,footerY=L.footer.y*h;ctx.textAlign='right';ctx.fillStyle='rgba(255,255,255,.88)';ctx.font=`800 ${Math.round(w*.018*logoScale)}px system-ui`;ctx.fillText('ELDYN',footerX,footerY);shareBounds.footer={x:footerX-w*.14*logoScale,y:footerY-w*.030*logoScale,w:w*.15*logoScale,h:w*.045*logoScale};ctx.shadowBlur=0;ctx.textAlign='left';if(style!=='photo'){ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)}
+  const logoY=pad*.82;ctx.textAlign='center';ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.046*logoScale)}px system-ui`;ctx.font=`900 ${Math.round(w*.07*logoScale)}px system-ui`;ctx.fillText('ELDYN',w/2,logoY+w*.025*logoScale);ctx.font=`700 ${Math.round(w*.018*logoScale)}px system-ui`;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()||'#39ff14';ctx.fillText('MOVE FORWARD',w/2,logoY+w*.058*logoScale);ctx.fillStyle='rgba(255,255,255,.92)';ctx.font=`600 ${Math.round(w*.024*logoScale)}px system-ui`;ctx.fillText('Certified Run',w/2,logoY+w*.086*logoScale);ctx.font=`700 ${Math.round(w*.015*logoScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.72)';ctx.fillText('SMILE. TRAIN. BECOME THE MACHINE.',w/2,logoY+w*.112*logoScale);
+  ctx.textAlign='left';const metricsY=h*.72;ctx.fillStyle='#fff';ctx.shadowColor='rgba(0,0,0,.38)';ctx.shadowBlur=4;ctx.font=`900 ${Math.round(w*.100*textScale)}px system-ui`;ctx.fillText(`${r.distanceKm.toFixed(2)} KM`,pad,metricsY);ctx.font=`750 ${Math.round(w*.035*textScale)}px system-ui`;ctx.fillText(`${formatClock(r.durationMs)}   ·   AVG ${paceText(r.avgPaceSecKm)}/KM`,pad,metricsY+h*.050);
+  const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim();ctx.font=`550 ${Math.round(w*.028*textScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.96)';ctx.fillText(caption.slice(0,64),pad,metricsY+h*.106);ctx.font=`650 ${Math.round(w*.019*textScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.82)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);ctx.textAlign='right';ctx.fillStyle='#b9ff3f';ctx.fillText('Verified by ELDYN',w-pad,h-pad*.92);ctx.shadowBlur=0;ctx.textAlign='left';if(style!=='photo'){ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)}
 }
+
 function openShareCard(id){
   shareRunRecord=(state.runs||[]).find(r=>r.id===id);if(!shareRunRecord)return;
   shareEls.caption.value='Today, I showed up. (ง •̀_•́)ง';sharePhotoImage=null;shareEls.photo.value='';renderShareCard();shareEls.dialog.showModal()
 }
-shareEls.canvas.addEventListener('pointerdown',e=>{const p=sharePointerPoint(e);const order=['caption','metrics','logo','route','footer'];const key=order.find(k=>pointInBounds(p.x,p.y,shareBounds[k]));if(!key)return;shareDrag={key,start:p,origin:{...storyLayout()[key]}};shareEls.canvas.setPointerCapture?.(e.pointerId);shareEls.canvas.classList.add('dragging');e.preventDefault()});
-shareEls.canvas.addEventListener('pointermove',e=>{
-  if(!shareDrag)return;
-  const p=sharePointerPoint(e),dx=(p.x-shareDrag.start.x)/shareEls.canvas.width,dy=(p.y-shareDrag.start.y)/shareEls.canvas.height;
-  let x=clamp01(shareDrag.origin.x+dx),y=clamp01(shareDrag.origin.y+dy);
-  const snap=.018,guides=[.075,.5,.925];
-  for(const g of guides){if(Math.abs(x-g)<snap)x=g;if(Math.abs(y-g)<snap)y=g}
-  state.settings.storyLayout=state.settings.storyLayout||{};
-  state.settings.storyLayout[shareDrag.key]={x,y};
-  renderShareCard();e.preventDefault()
-});
-function stopShareDrag(){if(!shareDrag)return;shareDrag=null;shareEls.canvas.classList.remove('dragging');saveState()}
-shareEls.canvas.addEventListener('pointerup',stopShareDrag);shareEls.canvas.addEventListener('pointercancel',stopShareDrag);
-shareEls.resetLayout?.addEventListener('click',()=>{state.settings.storyLayout=JSON.parse(JSON.stringify(defaultStoryLayout));saveState();renderShareCard()});
-shareEls.saveLayout?.addEventListener('click',()=>{saveState();alert('현재 배치를 My Layout으로 저장했어요.')});
 shareEls.photo.addEventListener('change',()=>{const file=shareEls.photo.files?.[0];if(!file)return;const img=new Image();img.onload=()=>{sharePhotoImage=img;renderShareCard();URL.revokeObjectURL(img.src)};img.src=URL.createObjectURL(file)});
 shareEls.ratio.addEventListener('change',()=>renderShareCard());shareEls.style?.addEventListener('change',()=>renderShareCard());shareEls.caption.addEventListener('input',()=>renderShareCard());[shareEls.textSize,shareEls.routeSize,shareEls.logoSize].forEach(el=>el?.addEventListener('input',()=>renderShareCard()));shareEls.render.addEventListener('click',()=>renderShareCard());
 function canvasBlob(){return new Promise(resolve=>shareEls.canvas.toBlob(resolve,'image/png',.95))}
 shareEls.download.addEventListener('click',async()=>{const blob=await canvasBlob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 shareEls.nativeShare.addEventListener('click',async()=>{const blob=await canvasBlob(),file=new File([blob],`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`,{type:'image/png'});if(navigator.canShare?.({files:[file]})){await navigator.share({title:'ELDYN Run',text:'ELDYN Run Certified',files:[file]})}else{alert('Direct sharing is not supported here. Use Save image, then share it from your gallery.')}});
 runEls.start.onclick=beginRun;runEls.pause.onclick=togglePause;runEls.finish.onclick=finishRun;runEls.gpsToggle.addEventListener('change',renderRun);runEls.autoPause.addEventListener('change',renderRun);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&runSession?.status==='running')requestWakeLock();saveActiveRun();if(document.visibilityState==='hidden')flushCloudSync()});
-window.addEventListener('pagehide',()=>{saveActiveRun();flushCloudSync()});
-window.addEventListener('beforeunload',()=>{saveActiveRun();flushCloudSync()});
-window.addEventListener('online',()=>flushCloudSync());setInterval(()=>{if(runSession)saveActiveRun()},5000);restoreActiveRun();
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    if(runSession?.status==='running'){requestWakeLock();if(runSession.gpsEnabled&&runWatchId===null)startGps()}
+    clearRunCompanionNotification();
+  }else{
+    releaseWakeLock();
+    if(runSession?.status==='running')showRunCompanionNotification(true);
+  }
+  saveActiveRun();
+});
+window.addEventListener('pagehide',()=>{saveActiveRun();if(runSession?.status==='running')showRunCompanionNotification(true)});
+window.addEventListener('beforeunload',saveActiveRun);
+setInterval(()=>{if(runSession){saveActiveRun();if(document.visibilityState==='hidden')showRunCompanionNotification()}},30000);restoreActiveRun();
 
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;installBtn.hidden=false});installBtn.onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;installBtn.hidden=true}};if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));initSupabase();render();renderRun();
 

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b0d0c" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="description" content="ELDYN — Design Your Run." />
+  <meta name="description" content="ELDYN — training, nutrition and running in one place." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
@@ -18,7 +18,7 @@
   <div id="app">
     <header class="topbar">
       <div class="brand-head">
-        <img class="official-header-logo" src="assets/eldyn-logo-neon-transparent.png" alt="ELDYN Move Forward" />
+        <img class="official-header-logo" src="assets/eldyn-official-logo.png" alt="ELDYN Move Forward" />
         <div><h1 id="greeting">Good day, Ellen.</h1><p class="slogan">Smile. Train. Become the Machine.</p></div>
       </div>
       <button id="profileBtn" class="icon-btn" aria-label="Account and sync">◎</button>
@@ -93,11 +93,6 @@
         <div class="route-panel">
           <div class="route-panel-head"><span>LIVE ROUTE</span><strong id="gpsQuality">WAITING</strong></div>
           <div id="liveRunMap" class="live-run-map" aria-label="Live running map"></div>
-          <div class="live-map-hud" aria-live="polite">
-            <div><span>DISTANCE</span><strong><b id="mapRunDistance">0.00</b> km</strong></div>
-            <div><span>PACE</span><strong id="mapRunPace">--'--&quot; /km</strong></div>
-            <div><span>TIME</span><strong id="mapRunTime">00:00:00</strong></div>
-          </div>
         </div>
 
         <div class="run-metrics">
@@ -270,12 +265,7 @@
         <label class="field-card"><span>Logo size</span><input id="shareLogoSize" type="range" min="75" max="115" value="88" /></label>
       </div>
 
-      <div class="story-studio-note">미리보기에서 로고·기록·경로·문구를 손가락으로 직접 움직일 수 있어요.</div>
       <canvas id="shareCanvas" width="1080" height="1350" aria-label="Run share card preview"></canvas>
-      <div class="story-layout-actions">
-        <button id="resetStoryLayoutBtn" type="button" class="secondary-btn">배치 초기화</button>
-        <button id="saveStoryLayoutBtn" type="button" class="secondary-btn">내 배치 저장</button>
-      </div>
       <div class="share-actions">
         <button id="renderShareBtn" type="button" class="secondary-btn">Refresh preview</button>
         <button id="downloadShareBtn" type="button" class="primary-btn">Save image</button>
