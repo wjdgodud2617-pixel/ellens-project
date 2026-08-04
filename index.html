@@ -36,6 +36,7 @@
         </div>
 
         <div class="section-head"><h2>Daily priorities</h2><button id="completeAllBtn" class="text-btn">Complete all</button></div>
+        <div id="dashboardRunCard" class="dashboard-run-card panel-lite"></div>
         <div id="priorityGrid" class="priority-grid"></div>
 
 
@@ -50,6 +51,7 @@
         </div>
         <div class="section-head"><h2 id="workoutHeading">Today's workout</h2><div><button id="changeWorkoutBtn" class="text-btn accent-text">운동 변경</button><button id="resetPlanBtn" class="text-btn">Reset plan</button><button id="addExerciseBtn" class="text-btn">+ Add</button></div></div>
         <div id="workoutList" class="stack"></div>
+        <button id="createWorkoutStoryBtn" class="secondary-btn compact-btn" type="button">운동 인증샷 만들기</button>
         <button id="todayWorkoutBtn" class="secondary-btn compact-btn" hidden>Return to today</button>
 
         <div class="section-head"><h2>Quick log</h2></div>
@@ -63,6 +65,8 @@
 
         <div class="section-head"><h2>Latest run analysis</h2></div>
         <div id="latestRunAnalysis" class="latest-run-analysis panel-lite"></div>
+        <div class="section-head"><h2 id="dailyReviewHeading">AI 하루 평가</h2></div>
+        <div id="dailyReviewCard" class="daily-review-card panel-lite"></div>
       </section>
 
 
@@ -193,6 +197,8 @@
           <button id="installBtn" class="secondary-btn" hidden>Install app</button>
         </div>
         <p class="fine-print">Cloud sync is configured. Sign in from the ◎ account button to use the same records on mobile and PC.</p>
+        <div class="section-head"><div><p class="eyebrow">WEARABLE TEST</p><h2 id="wearableHeading">Apple Watch 화면 테스트</h2></div></div>
+        <div class="wearable-card panel-lite"><div><strong>ELDYN Watch Companion</strong><p class="muted" id="wearableNote">워치용 화면 디자인을 미리 확인합니다. PWA에서 실제 Apple Watch 설치·연동은 지원되지 않습니다.</p></div><button id="openWatchTestBtn" class="secondary-btn" type="button">화면 테스트</button></div>
       </section>
     </main>
 
@@ -351,6 +357,29 @@
       </div>
       <p class="fine-print">AI 판독 결과는 촬영 상태와 제품 표기 방식에 따라 오류가 있을 수 있습니다. 저장 전 숫자를 확인해 주세요.</p>
     </form>
+  </dialog>
+
+
+  <dialog id="workoutStoryDialog" class="modal share-run-modal">
+    <form method="dialog">
+      <button class="close-btn" value="cancel" aria-label="Close">×</button>
+      <p class="eyebrow">ELDYN · WORKOUT STORY</p><h2 id="workoutStoryTitle">운동 인증샷</h2>
+      <canvas id="workoutStoryCanvas" width="1080" height="1350"></canvas>
+      <div class="share-controls">
+        <label class="field-card"><span>운동 사진</span><input id="workoutStoryPhoto" type="file" accept="image/*"></label>
+        <label class="field-card"><span>운동 종류</span><select id="workoutStoryType"><option>Gym</option><option>HYROX</option><option>Walking</option><option>Cycling</option><option>Workout</option></select></label>
+        <label class="field-card"><span>운동 시간(분)</span><input id="workoutStoryDuration" type="number" value="45" min="1"></label>
+        <label class="memo-card"><span>문구</span><textarea id="workoutStoryCaption" rows="2">오늘도 해냈다.</textarea></label>
+      </div>
+      <div class="share-actions"><button id="renderWorkoutStoryBtn" type="button" class="secondary-btn">미리보기</button><button id="downloadWorkoutStoryBtn" type="button" class="primary-btn">이미지 저장</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="watchTestDialog" class="modal watch-test-dialog">
+    <form method="dialog"><button class="close-btn" value="cancel" aria-label="Close">×</button></form>
+    <div class="watch-shell"><div class="watch-screen"><small>ELDYN</small><b id="watchTestDistance">0.00 km</b><strong id="watchTestTime">00:00</strong><span id="watchTestPace">--'-- /km</span><em>● RUNNING</em></div></div>
+    <div class="form-row"><button id="watchTestStart" type="button" class="primary-btn">Start test</button><button id="watchTestReset" type="button" class="secondary-btn">Reset</button></div>
+    <p class="fine-print">UI preview only. 실제 Apple Watch 앱 설치와 센서 연동은 네이티브 watchOS 앱이 필요합니다.</p>
   </dialog>
 
   <dialog id="accountDialog" class="modal">
