@@ -758,3 +758,34 @@ nutritionLabelEls.save.onclick=()=>{
 setTimeout(()=>{ensureLiveRunMap();liveRunMap?.invalidateSize()},250);document.querySelectorAll('[data-view="run"]').forEach(b=>b.addEventListener('click',()=>setTimeout(()=>{ensureLiveRunMap();liveRunMap?.invalidateSize();updateLiveRunMap()},120)));
 
 runEls.historyToggle?.addEventListener('click',()=>{runHistoryExpanded=!runHistoryExpanded;renderRunUi();});
+
+// v1.2.7 — reliable application bootstrap and Supabase login initialization.
+let eldynBootstrapStarted=false;
+async function waitForSupabaseLibrary(timeoutMs=8000){
+  const started=Date.now();
+  while(!window.supabase&&Date.now()-started<timeoutMs){
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  return !!window.supabase;
+}
+async function bootstrapEldyn(){
+  if(eldynBootstrapStarted)return;
+  eldynBootstrapStarted=true;
+  try{
+    render();
+    renderRun();
+  }catch(error){
+    console.error('ELDYN initial render failed:',error);
+  }
+  if('serviceWorker'in navigator){
+    navigator.serviceWorker.register('./sw.js').catch(error=>console.warn('Service worker registration failed:',error));
+  }
+  const libraryReady=await waitForSupabaseLibrary();
+  if(!libraryReady){
+    if(typeof syncStatus!=='undefined'&&syncStatus)syncStatus.textContent='Cloud library could not be loaded. Check the internet connection and reload.';
+    return;
+  }
+  await initSupabase();
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootstrapEldyn,{once:true});
+else bootstrapEldyn();
