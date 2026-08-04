@@ -114,6 +114,7 @@
           <button id="startRunBtn" class="run-start-btn">▶ Start Run</button>
           <button id="pauseRunBtn" class="secondary-btn" hidden>Ⅱ Pause</button>
           <button id="finishRunBtn" class="danger-btn" hidden>■ Finish</button>
+          <button id="openRunModeBtn" class="secondary-btn run-mode-open" hidden>전용 러닝 화면</button>
         </div>
         <p class="fine-print run-safety">For safety, check traffic and surroundings. 러닝 중 기록은 자동 저장됩니다. 화면 잠금 중에는 iOS 상태에 따라 GPS가 일시 중단될 수 있으며, 앱을 다시 열면 저장된 세션을 복구합니다.</p>
 
@@ -123,6 +124,35 @@
         <div class="section-head"><h2>Recent runs</h2></div>
         <div id="runHistory" class="stack"></div>
       </section>
+
+      <div id="runModeOverlay" class="run-mode-overlay" hidden aria-live="polite">
+        <div class="run-mode-top">
+          <div class="run-mode-brand">ELDYN <small>RUNNING MODE</small></div>
+          <span id="runModeGps" class="run-mode-gps">GPS WAITING</span>
+        </div>
+        <div class="run-mode-main">
+          <div class="run-mode-distance"><span>DISTANCE</span><strong id="runModeDistance">0.00</strong><small>KM</small></div>
+          <div class="run-mode-row">
+            <div><span>TIME</span><strong id="runModeTime">00:00:00</strong></div>
+            <div><span>AVG PACE</span><strong id="runModePace">--'--"</strong><small>/KM</small></div>
+          </div>
+          <div class="run-mode-sub">
+            <span id="runModeStatus">화면을 켠 상태로 사용하면 GPS가 가장 안정적입니다.</span>
+            <span id="runModeAccuracy">정확도 --m</span>
+          </div>
+        </div>
+        <div id="runModeControls" class="run-mode-controls">
+          <button id="runModePause" class="run-mode-pause">Ⅱ 일시정지</button>
+          <button id="runModeFinish" class="run-mode-finish">■ 종료</button>
+          <button id="runModeLock" class="run-mode-lock">🔒 화면 잠금</button>
+          <button id="runModeExit" class="run-mode-exit">일반 화면</button>
+        </div>
+        <div id="runModeLocked" class="run-mode-locked" hidden>
+          <div>터치 잠금 중</div>
+          <small>오작동 방지 모드</small>
+          <button id="runModeUnlock">2초간 눌러 해제</button>
+        </div>
+      </div>
 
       <section id="plan" class="view" aria-label="Weekly plan">
         <div class="section-head plan-title-row"><div><p class="eyebrow">REPEATING ROUTINE</p><h2>Weekly Plan</h2></div><p class="muted">Tap a day to open and customise that date.</p></div>

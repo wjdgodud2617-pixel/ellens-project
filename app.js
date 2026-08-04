@@ -341,8 +341,14 @@ const runEls={
   splits:document.getElementById('runSplits'),history:document.getElementById('runHistory'),start:document.getElementById('startRunBtn'),
   pause:document.getElementById('pauseRunBtn'),finish:document.getElementById('finishRunBtn'),gpsToggle:document.getElementById('gpsEnabledToggle'),
   autoPause:document.getElementById('autoPauseToggle'),movingTime:document.getElementById('runMovingTime'),topSpeed:document.getElementById('runTopSpeed'),
-  quality:document.getElementById('gpsQuality'),map:document.getElementById('liveRunMap')
+  quality:document.getElementById('gpsQuality'),map:document.getElementById('liveRunMap'),openMode:document.getElementById('openRunModeBtn')
 };
+const runModeEls={overlay:document.getElementById('runModeOverlay'),distance:document.getElementById('runModeDistance'),time:document.getElementById('runModeTime'),pace:document.getElementById('runModePace'),gps:document.getElementById('runModeGps'),accuracy:document.getElementById('runModeAccuracy'),status:document.getElementById('runModeStatus'),controls:document.getElementById('runModeControls'),locked:document.getElementById('runModeLocked'),pause:document.getElementById('runModePause'),finish:document.getElementById('runModeFinish'),lock:document.getElementById('runModeLock'),unlock:document.getElementById('runModeUnlock'),exit:document.getElementById('runModeExit')};
+let runModeUnlockTimer=null;
+function setRunModeLocked(locked){if(!runModeEls.overlay)return;runModeEls.overlay.classList.toggle('is-locked',!!locked);runModeEls.controls.hidden=!!locked;runModeEls.locked.hidden=!locked}
+async function enterRunMode(){if(!runModeEls.overlay||!runSession)return;runModeEls.overlay.hidden=false;document.body.classList.add('run-mode-active');setRunModeLocked(false);requestWakeLock();try{await document.documentElement.requestFullscreen?.()}catch{}renderRunMode()}
+function exitRunMode(){if(!runModeEls.overlay)return;runModeEls.overlay.hidden=true;document.body.classList.remove('run-mode-active');setRunModeLocked(false);try{if(document.fullscreenElement)document.exitFullscreen?.()}catch{}}
+function renderRunMode(){if(!runModeEls.overlay)return;const r=runSession,d=r?r.distanceM/1000:0,ms=r?elapsedMs():0,avg=d>0?(ms/1000)/d:Infinity;runModeEls.distance.textContent=d.toFixed(2);runModeEls.time.textContent=formatClock(ms);runModeEls.pace.textContent=paceText(avg);runModeEls.gps.textContent=!r?.gpsEnabled?'GPS OFF':r?.hasFix?'GPS LIVE':'GPS WAITING';runModeEls.gps.className='run-mode-gps '+(r?.hasFix?'live':'');runModeEls.accuracy.textContent=`정확도 ${r?.accuracy?Math.round(r.accuracy):'--'}m`;runModeEls.status.textContent=r?.autoPaused?'자동 일시정지 중':r?.status==='paused'?'러닝 일시정지':r?.hasFix?'GPS 경로 기록 중':'GPS 신호를 찾는 중';runModeEls.pause.textContent=r?.status==='paused'?'▶ 다시 시작':'Ⅱ 일시정지'}
 const shareEls={
   dialog:document.getElementById('shareRunDialog'),photo:document.getElementById('sharePhotoInput'),ratio:document.getElementById('shareRatioSelect'),style:document.getElementById('shareStyleSelect'),
   caption:document.getElementById('shareCaptionInput'),canvas:document.getElementById('shareCanvas'),render:document.getElementById('renderShareBtn'),
@@ -400,7 +406,7 @@ function renderRun(){
   runEls.movingTime.textContent=formatClock(r?movingMs():0);runEls.topSpeed.textContent=((r?.topSpeedMps||0)*3.6).toFixed(1);runEls.quality.textContent=r?.gpsEnabled?gpsQualityLabel(r?.accuracy):'GPS OFF';drawLiveRoute();
   runEls.currentPace.textContent=paceText(r?.currentPace||Infinity);runEls.calories.textContent=runCalories(d);
   runEls.accuracy.textContent=r?.gpsEnabled?(r?.accuracy?Math.round(r.accuracy):'--'):'OFF';
-  runEls.gpsToggle.disabled=!!r;runEls.gpsToggle.checked=r?r.gpsEnabled:runEls.gpsToggle.checked;
+  runEls.gpsToggle.disabled=!!r;runEls.gpsToggle.checked=r?r.gpsEnabled:runEls.gpsToggle.checked;if(runEls.openMode)runEls.openMode.hidden=!r;renderRunMode();
   if(!r){
     runEls.title.textContent='Ready to run';
     runEls.note.textContent=runEls.gpsToggle.checked?'GPS will map your route after you tap Start Run.':'Private timer mode. No location will be collected.';
@@ -496,7 +502,7 @@ function beginRun(){
   const gpsEnabled=runEls.gpsToggle.checked;
   if(gpsEnabled&&!window.isSecureContext)return alert('GPS requires HTTPS. Open the Vercel URL, or switch GPS off.');
   runSession={status:'running',gpsEnabled,autoPauseEnabled:runEls.autoPause.checked,autoPaused:false,startedAt:new Date().toISOString(),segmentStartedAt:Date.now(),elapsedBefore:0,movingMs:0,movingSegmentAt:Date.now(),distanceM:0,lastPoint:null,currentPace:Infinity,topSpeedMps:0,accuracy:null,hasFix:false,speedSamples:[],splits:[],route:[]};saveActiveRun();
-  if(gpsEnabled)startGps();requestWakeLock();requestRunNoticePermission().then(ok=>{if(ok)showRunCompanionNotification(true)});runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000);renderRun()
+  if(gpsEnabled)startGps();requestWakeLock();requestRunNoticePermission().then(ok=>{if(ok)showRunCompanionNotification(true)});runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000);renderRun();setTimeout(()=>enterRunMode(),120)
 }
 function togglePause(){
   if(!runSession)return;
@@ -513,7 +519,7 @@ function finishRun(){
     if(manual===null)return;
     distanceKm=Math.max(0,Number(String(manual).replace(',','.'))||0);
   }
-  stopGps();releaseWakeLock();clearRunCompanionNotification();clearInterval(runTimer);runTimer=null;
+  stopGps();releaseWakeLock();clearRunCompanionNotification();clearInterval(runTimer);runTimer=null;exitRunMode();
   if(distanceKm>=.02){
     const record={id:crypto.randomUUID(),startedAt:runSession.startedAt,endedAt:new Date().toISOString(),durationMs,distanceKm,
       avgPaceSecKm:((movingDurationMs||durationMs)/1000)/distanceKm,calories:runCalories(distanceKm),splits:runSession.splits,
@@ -599,10 +605,12 @@ shareEls.saveLayout?.addEventListener('click',()=>{saveState();alert(state.setti
 function canvasBlob(){return new Promise(resolve=>shareEls.canvas.toBlob(resolve,'image/png',.95))}
 shareEls.download.addEventListener('click',async()=>{const blob=await canvasBlob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 shareEls.nativeShare.addEventListener('click',async()=>{const blob=await canvasBlob(),file=new File([blob],`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`,{type:'image/png'});if(navigator.canShare?.({files:[file]})){await navigator.share({title:'ELDYN Run',text:'ELDYN Run Certified',files:[file]})}else{alert('Direct sharing is not supported here. Use Save image, then share it from your gallery.')}});
-runEls.start.onclick=beginRun;runEls.pause.onclick=togglePause;runEls.finish.onclick=finishRun;runEls.gpsToggle.addEventListener('change',renderRun);runEls.autoPause.addEventListener('change',renderRun);
+runEls.start.onclick=beginRun;runEls.pause.onclick=togglePause;runEls.finish.onclick=finishRun;runEls.openMode?.addEventListener('click',enterRunMode);runEls.gpsToggle.addEventListener('change',renderRun);runEls.autoPause.addEventListener('change',renderRun);
+runModeEls.pause?.addEventListener('click',()=>{togglePause();renderRunMode()});runModeEls.finish?.addEventListener('click',finishRun);runModeEls.exit?.addEventListener('click',exitRunMode);runModeEls.lock?.addEventListener('click',()=>setRunModeLocked(true));
+runModeEls.unlock?.addEventListener('pointerdown',()=>{clearTimeout(runModeUnlockTimer);runModeUnlockTimer=setTimeout(()=>setRunModeLocked(false),2000)});['pointerup','pointercancel','pointerleave'].forEach(ev=>runModeEls.unlock?.addEventListener(ev,()=>clearTimeout(runModeUnlockTimer)));
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){
-    if(runSession?.status==='running'){requestWakeLock();if(runSession.gpsEnabled&&runWatchId===null)startGps()}
+    if(runSession?.status==='running'){requestWakeLock();if(runSession.gpsEnabled&&runWatchId===null)startGps();renderRunMode()}
     clearRunCompanionNotification();
   }else{
     releaseWakeLock();
