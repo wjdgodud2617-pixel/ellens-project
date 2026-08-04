@@ -341,7 +341,8 @@ const runEls={
   splits:document.getElementById('runSplits'),history:document.getElementById('runHistory'),start:document.getElementById('startRunBtn'),
   pause:document.getElementById('pauseRunBtn'),finish:document.getElementById('finishRunBtn'),gpsToggle:document.getElementById('gpsEnabledToggle'),
   autoPause:document.getElementById('autoPauseToggle'),movingTime:document.getElementById('runMovingTime'),topSpeed:document.getElementById('runTopSpeed'),
-  quality:document.getElementById('gpsQuality'),map:document.getElementById('liveRunMap'),openMode:document.getElementById('openRunModeBtn')
+  quality:document.getElementById('gpsQuality'),map:document.getElementById('liveRunMap'),openMode:document.getElementById('openRunModeBtn'),
+  historyToggle:document.getElementById('toggleRunHistoryBtn')
 };
 const runModeEls={overlay:document.getElementById('runModeOverlay'),distance:document.getElementById('runModeDistance'),time:document.getElementById('runModeTime'),pace:document.getElementById('runModePace'),gps:document.getElementById('runModeGps'),accuracy:document.getElementById('runModeAccuracy'),status:document.getElementById('runModeStatus'),controls:document.getElementById('runModeControls'),locked:document.getElementById('runModeLocked'),pause:document.getElementById('runModePause'),finish:document.getElementById('runModeFinish'),lock:document.getElementById('runModeLock'),unlock:document.getElementById('runModeUnlock'),exit:document.getElementById('runModeExit')};
 let runModeUnlockTimer=null;
@@ -424,9 +425,15 @@ function renderRun(){
   }
   const splits=r?.splits||[];
   runEls.splits.innerHTML=splits.length?splits.map((x,i)=>`<div class="split-row"><span>KM ${i+1}</span><strong>${paceText(x.seconds)}</strong></div>`).join(''):'<div class="empty-state"><span>🏃</span><p>Your 1 km splits will appear here.</p></div>';
-  const history=(state.runs||[]).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt)).slice(0,10);
-  runEls.history.innerHTML=history.length?history.map(x=>`<div class="run-history-card"><div><h3>${new Date(x.endedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</h3><p>${formatClock(x.durationMs)} · ${paceText(x.avgPaceSecKm)}/km · ${x.calories} kcal ${x.gpsEnabled===false?'· GPS OFF':''}</p></div><div class="run-history-actions"><strong class="history-distance">${x.distanceKm.toFixed(2)} km</strong><button class="mini-edit share-run-btn" data-run-id="${x.id}">Share card</button></div></div>`).join(''):'<div class="empty-state"><span>👟</span><p>No completed runs yet.</p></div>';
+  const allHistory=(state.runs||[]).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));
+  const history=runHistoryExpanded?allHistory:allHistory.slice(0,2);
+  runEls.history.innerHTML=history.length?history.map(x=>`<div class="run-history-card"><button class="run-history-main" data-open-run-detail="${x.id}"><div><h3>${new Date(x.endedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</h3><p>${formatClock(x.durationMs)} · ${paceText(x.avgPaceSecKm)}/km</p></div><strong class="history-distance">${x.distanceKm.toFixed(2)} km</strong></button><button class="mini-edit share-run-btn" data-run-id="${x.id}">Share</button></div>`).join(''):'<div class="empty-state"><span>👟</span><p>No completed runs yet.</p></div>';
+  if(runEls.historyToggle){
+    runEls.historyToggle.hidden=allHistory.length<=2;
+    runEls.historyToggle.textContent=runHistoryExpanded?((state.settings.language||'ko')==='ko'?'최근 2개만 보기':'Show recent 2'):((state.settings.language||'ko')==='ko'?'전체 기록 보기':'View all history');
+  }
   runEls.history.querySelectorAll('.share-run-btn').forEach(btn=>btn.addEventListener('click',()=>openShareCard(btn.dataset.runId)));
+  runEls.history.querySelectorAll('[data-open-run-detail]').forEach(btn=>btn.addEventListener('click',()=>{const id=btn.dataset.openRunDetail;const run=(state.runs||[]).find(r=>r.id===id);if(run)openShareCard(id)}));
 }
 async function requestWakeLock(){try{if('wakeLock'in navigator&&document.visibilityState==='visible')runWakeLock=await navigator.wakeLock.request('screen')}catch{}}
 function releaseWakeLock(){try{runWakeLock?.release()}catch{}runWakeLock=null}
@@ -722,3 +729,5 @@ nutritionLabelEls.save.onclick=()=>{
 };
 
 setTimeout(()=>{ensureLiveRunMap();liveRunMap?.invalidateSize()},250);document.querySelectorAll('[data-view="run"]').forEach(b=>b.addEventListener('click',()=>setTimeout(()=>{ensureLiveRunMap();liveRunMap?.invalidateSize();updateLiveRunMap()},120)));
+
+runEls.historyToggle?.addEventListener('click',()=>{runHistoryExpanded=!runHistoryExpanded;renderRunUi();});
