@@ -395,13 +395,21 @@
       <button class="close-btn" value="cancel" aria-label="Close">×</button>
       <p class="eyebrow">ELDYN · WORKOUT STORY</p><h2 id="workoutStoryTitle">운동 인증샷</h2>
       <canvas id="workoutStoryCanvas" width="1080" height="1350"></canvas>
-      <div class="share-controls">
+      <p class="story-studio-note">미리보기에서 사진 또는 선택한 텍스트를 손가락으로 이동하세요. 크기와 박스 너비도 조절할 수 있어요.</p>
+      <div class="share-controls workout-story-controls">
         <label class="field-card"><span>운동 사진</span><input id="workoutStoryPhoto" type="file" accept="image/*"></label>
         <label class="field-card"><span>운동 종류</span><select id="workoutStoryType"><option>Gym</option><option>HYROX</option><option>Walking</option><option>Cycling</option><option>Workout</option></select></label>
         <label class="field-card"><span>운동 시간(분)</span><input id="workoutStoryDuration" type="number" value="45" min="1"></label>
-        <label class="memo-card"><span>문구</span><textarea id="workoutStoryCaption" rows="2">오늘도 해냈다.</textarea></label>
+        <label class="field-card"><span>이동 대상</span><select id="workoutStoryEditTarget"><option value="auto">자동 선택</option><option value="photo">사진</option><option value="title">운동명</option><option value="summary">시간·종목 수</option><option value="details">상세 운동</option><option value="caption">문구</option><option value="watermark">ELDYN</option></select></label>
+        <label class="memo-card workout-story-wide"><span>상세 운동 내역</span><textarea id="workoutStoryDetails" rows="4" placeholder="스쿼트 4×10 · 45kg
+루마니안 데드리프트 3×12 · 35kg"></textarea><small>오늘 운동 목록에서 자동 입력되며 직접 수정할 수 있어요.</small></label>
+        <label class="memo-card workout-story-wide"><span>문구</span><textarea id="workoutStoryCaption" rows="2">오늘도 해냈다.</textarea></label>
+        <label class="field-card range-card"><span>텍스트 크기 <b id="workoutStoryTextSizeValue">100%</b></span><input id="workoutStoryTextSize" type="range" min="55" max="180" value="100"></label>
+        <label class="field-card range-card"><span>상세 박스 너비 <b id="workoutStoryWidthValue">76%</b></span><input id="workoutStoryWidth" type="range" min="35" max="92" value="76"></label>
+        <label class="field-card range-card"><span>사진 확대 <b id="workoutStoryPhotoSizeValue">100%</b></span><input id="workoutStoryPhotoSize" type="range" min="100" max="250" value="100"></label>
+        <label class="field-card"><span>상세 표시</span><select id="workoutStoryDetailMode"><option value="top3">주요 운동 3개</option><option value="all">전체 운동</option><option value="none">숨기기</option></select></label>
       </div>
-      <div class="share-actions"><button id="renderWorkoutStoryBtn" type="button" class="secondary-btn">미리보기</button><button id="downloadWorkoutStoryBtn" type="button" class="primary-btn">이미지 저장</button></div>
+      <div class="share-actions"><button id="resetWorkoutStoryLayoutBtn" type="button" class="secondary-btn">배치 초기화</button><button id="renderWorkoutStoryBtn" type="button" class="secondary-btn">미리보기</button><button id="downloadWorkoutStoryBtn" type="button" class="primary-btn">이미지 저장</button></div>
     </form>
   </dialog>
 
