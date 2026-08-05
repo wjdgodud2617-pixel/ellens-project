@@ -36,11 +36,12 @@
         </div>
 
         <div class="section-head"><h2>Daily priorities</h2><button id="completeAllBtn" class="text-btn">Complete all</button></div>
+        <div class="section-head compact-head"><h2 id="dashboardRecentRunsHeading">Recent Runs</h2><button id="dashboardViewRunsBtn" class="text-btn" type="button">View all</button></div>
         <div id="dashboardRunCard" class="dashboard-run-card panel-lite"></div>
         <div id="priorityGrid" class="priority-grid"></div>
 
 
-        <div class="section-head"><h2>Today's meal plan</h2><div><button id="nutritionLabelBtn" class="text-btn">영양표 분석</button><button id="regenerateMealsBtn" class="text-btn">Regenerate</button></div></div>
+        <div class="section-head"><h2 id="mealPlanHeading">Today's meal plan</h2><div><button id="nutritionLabelBtn" class="text-btn">영양표 분석</button><button id="regenerateMealsBtn" class="text-btn">Regenerate</button></div></div>
         <div id="nutritionTargetCard" class="nutrition-target panel-lite"></div>
         <div id="mealPlanList" class="meal-plan-list"></div>
 
@@ -81,6 +82,7 @@
         </div>
 
         <div class="run-privacy panel-lite">
+          <label class="field-card activity-type-card"><span>ACTIVITY</span><select id="runActivityType"><option value="run">Running</option><option value="walk">Walking</option></select></label>
           <label class="gps-toggle">
             <input id="gpsEnabledToggle" type="checkbox" checked />
             <span>
@@ -398,7 +400,7 @@
       <p class="story-studio-note">미리보기에서 사진 또는 선택한 텍스트를 손가락으로 이동하세요. 크기와 박스 너비도 조절할 수 있어요.</p>
       <div class="share-controls workout-story-controls">
         <label class="field-card"><span>운동 사진</span><input id="workoutStoryPhoto" type="file" accept="image/*"></label>
-        <label class="field-card"><span>운동 종류</span><select id="workoutStoryType"><option>Gym</option><option>HYROX</option><option>Walking</option><option>Cycling</option><option>Workout</option></select></label>
+        <label class="field-card"><span>운동 종류</span><select id="workoutStoryType"><option>Gym</option><option>HYROX</option><option>CrossFit</option><option>Cardio</option><option>Walking</option><option>Cycling</option><option>Workout</option></select></label>
         <label class="field-card"><span>운동 시간(분)</span><input id="workoutStoryDuration" type="number" value="45" min="1"></label>
         <label class="field-card"><span>이동 대상</span><select id="workoutStoryEditTarget"><option value="auto">자동 선택</option><option value="photo">사진</option><option value="title">운동명</option><option value="summary">시간·종목 수</option><option value="details">상세 운동</option><option value="caption">문구</option><option value="watermark">ELDYN</option></select></label>
         <label class="memo-card workout-story-wide"><span>상세 운동 내역</span><textarea id="workoutStoryDetails" rows="4" placeholder="스쿼트 4×10 · 45kg
