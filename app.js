@@ -408,7 +408,7 @@ const runEls={
   pause:document.getElementById('pauseRunBtn'),finish:document.getElementById('finishRunBtn'),gpsToggle:document.getElementById('gpsEnabledToggle'),
   autoPause:document.getElementById('autoPauseToggle'),activityType:document.getElementById('runActivityType'),movingTime:document.getElementById('runMovingTime'),topSpeed:document.getElementById('runTopSpeed'),
   quality:document.getElementById('gpsQuality'),map:document.getElementById('liveRunMap'),openMode:document.getElementById('openRunModeBtn'),
-  historyToggle:document.getElementById('toggleRunHistoryBtn')
+  historyToggle:document.getElementById('toggleRunHistoryBtn'),latestStory:document.getElementById('latestRunStoryBtn')
 };
 const runModeEls={overlay:document.getElementById('runModeOverlay'),distance:document.getElementById('runModeDistance'),time:document.getElementById('runModeTime'),pace:document.getElementById('runModePace'),gps:document.getElementById('runModeGps'),accuracy:document.getElementById('runModeAccuracy'),status:document.getElementById('runModeStatus'),controls:document.getElementById('runModeControls'),locked:document.getElementById('runModeLocked'),pause:document.getElementById('runModePause'),finish:document.getElementById('runModeFinish'),lock:document.getElementById('runModeLock'),unlock:document.getElementById('runModeUnlock'),exit:document.getElementById('runModeExit')};
 let runModeUnlockTimer=null;
@@ -492,8 +492,14 @@ function renderRun(){
   const splits=r?.splits||[];
   runEls.splits.innerHTML=splits.length?splits.map((x,i)=>`<div class="split-row"><span>KM ${i+1}</span><strong>${paceText(x.seconds)}</strong></div>`).join(''):'<div class="empty-state"><span>🏃</span><p>Your 1 km splits will appear here.</p></div>';
   const allHistory=(state.runs||[]).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));
+  if(runEls.latestStory){
+    const latest=allHistory[0];
+    runEls.latestStory.hidden=!latest;
+    runEls.latestStory.textContent=(state.settings.language==='ko'?'📸 최근 러닝·걷기 인증샷 만들기':'📸 Create latest run/walk story');
+    runEls.latestStory.onclick=latest?()=>openShareCard(latest.id):null;
+  }
   const history=runHistoryExpanded?allHistory:allHistory.slice(0,2);
-  if(runEls.history) runEls.history.innerHTML=history.length?history.map(x=>`<div class="run-history-card"><button class="run-history-main" data-open-run-detail="${x.id}"><div><h3>${x.activityType==='walk'?(state.settings.language==='ko'?'걷기':'Walk'):(state.settings.language==='ko'?'러닝':'Run')} · ${new Date(x.endedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</h3><p>${formatClock(x.durationMs)} · ${paceText(x.avgPaceSecKm)}/km</p></div><strong class="history-distance">${x.distanceKm.toFixed(2)} km</strong></button><button class="mini-edit share-run-btn" data-run-id="${x.id}">Share</button></div>`).join(''):'<div class="empty-state"><span>👟</span><p>No completed runs yet.</p></div>';
+  if(runEls.history) runEls.history.innerHTML=history.length?history.map(x=>`<div class="run-history-card"><button class="run-history-main" data-open-run-detail="${x.id}"><div><h3>${x.activityType==='walk'?(state.settings.language==='ko'?'걷기':'Walk'):(state.settings.language==='ko'?'러닝':'Run')} · ${new Date(x.endedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</h3><p>${formatClock(x.durationMs)} · ${paceText(x.avgPaceSecKm)}/km</p></div><strong class="history-distance">${x.distanceKm.toFixed(2)} km</strong></button><button class="mini-edit share-run-btn" data-run-id="${x.id}">${state.settings.language==='ko'?'인증샷 만들기':'Create story'}</button></div>`).join(''):'<div class="empty-state"><span>👟</span><p>No completed runs yet.</p></div>';
   if(runEls.historyToggle){
     runEls.historyToggle.hidden=allHistory.length<=2;
     runEls.historyToggle.textContent=runHistoryExpanded?((state.settings.language||'ko')==='ko'?'최근 2개만 보기':'Show recent 2'):((state.settings.language||'ko')==='ko'?'전체 기록 보기':'View all history');
