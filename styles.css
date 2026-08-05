@@ -181,3 +181,9 @@ html[data-theme="paris"]{--accent:#f58fa3;--accent-rgb:245,143,163;--accent-soft
 
 /* v1.2.9 stable patch */
 .compact-head{margin-top:12px}.activity-type-card{margin-bottom:12px}.activity-type-card select{margin-top:7px}.workout-option input[type=checkbox]{width:20px;height:20px;flex:0 0 auto}.workout-option.selected{background:color-mix(in srgb,var(--accent) 8%,var(--panel2))}
+
+/* v1.2.9.3 explicit run story entry */
+.dashboard-run-item-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;width:100%}
+.dashboard-run-item-wrap .dashboard-run-item{width:100%}
+.dashboard-story-btn{white-space:nowrap;min-height:42px}
+@media(max-width:520px){.dashboard-run-item-wrap{grid-template-columns:1fr}.dashboard-story-btn{width:100%}}
