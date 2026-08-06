@@ -202,7 +202,7 @@ function renderDashboardRunCard(){
     el.innerHTML=runs.map(r=>{
       const k=keyFromDate(new Date(r.endedAt)),label=k===todayKey()?(lang==='ko'?'오늘':'Today'):(lang==='ko'?'직전':'Previous');
       const activity=r.activityType==='walk'?(lang==='ko'?'걷기':'Walk'):(lang==='ko'?'러닝':'Run');
-      return `<div class="dashboard-run-item-wrap"><button class="dashboard-run-item" type="button" data-open-run-story="${r.id}"><span><small>${label}</small><b>${activity} ${r.distanceKm.toFixed(2)} km</b></span><span>${formatClock(r.durationMs)} · ${paceText(r.avgPaceSecKm)}/km</span></button><button class="mini-edit dashboard-story-btn" type="button" data-open-run-story="${r.id}">${lang==='ko'?'인증샷 만들기':'Create story'}</button></div>`
+      return `<div class="dashboard-run-item-wrap"><button class="dashboard-run-item" type="button" data-open-run-story="${r.id}"><span><small>${label}</small><b>${activity} ${formatDistance(r.distanceKm)}</b></span><span>${formatClock(r.durationMs)} · ${paceText(r.avgPaceSecKm)}/km</span></button><button class="mini-edit dashboard-story-btn" type="button" data-open-run-story="${r.id}">${lang==='ko'?'인증샷 만들기':'Create story'}</button></div>`
     }).join('');
     el.querySelectorAll('[data-open-run-story]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openShareCard(btn.dataset.openRunStory)}));
   }
@@ -415,7 +415,7 @@ let runModeUnlockTimer=null;
 function setRunModeLocked(locked){if(!runModeEls.overlay)return;runModeEls.overlay.classList.toggle('is-locked',!!locked);runModeEls.controls.hidden=!!locked;runModeEls.locked.hidden=!locked}
 async function enterRunMode(){if(!runModeEls.overlay||!runSession)return;runModeEls.overlay.hidden=false;document.body.classList.add('run-mode-active');setRunModeLocked(false);requestWakeLock();try{await document.documentElement.requestFullscreen?.()}catch{}renderRunMode()}
 function exitRunMode(){if(!runModeEls.overlay)return;runModeEls.overlay.hidden=true;document.body.classList.remove('run-mode-active');setRunModeLocked(false);try{if(document.fullscreenElement)document.exitFullscreen?.()}catch{}}
-function renderRunMode(){if(!runModeEls.overlay)return;const r=runSession,d=r?r.distanceM/1000:0,ms=r?elapsedMs():0,avg=d>0?(ms/1000)/d:Infinity;runModeEls.distance.textContent=d.toFixed(2);runModeEls.time.textContent=formatClock(ms);runModeEls.pace.textContent=paceText(avg);runModeEls.gps.textContent=!r?.gpsEnabled?(state.settings.language==='ko'?'GPS 꺼짐':'GPS OFF'):r?.hasFix?(state.settings.language==='ko'?'GPS 연결':'GPS LIVE'):(state.settings.language==='ko'?'GPS 대기':'GPS WAITING');runModeEls.gps.className='run-mode-gps '+(r?.hasFix?'live':'');runModeEls.accuracy.textContent=`정확도 ${r?.accuracy?Math.round(r.accuracy):'--'}m`;runModeEls.status.textContent=r?.autoPaused?'자동 일시정지 중':r?.status==='paused'?'러닝 일시정지':r?.hasFix?'GPS 경로 기록 중':'GPS 신호를 찾는 중';runModeEls.pause.textContent=r?.status==='paused'?'▶ 다시 시작':'Ⅱ 일시정지'}
+function renderRunMode(){if(!runModeEls.overlay)return;const r=runSession,d=r?r.distanceM/1000:0,ms=r?elapsedMs():0,avg=d>0?(ms/1000)/d:Infinity;runModeEls.distance.textContent=d<1?Math.round(d*1000):d.toFixed(2);const modeUnit=document.getElementById('runModeDistanceUnit');if(modeUnit)modeUnit.textContent=d<1?'M':'KM';runModeEls.time.textContent=formatClock(ms);runModeEls.pace.textContent=paceText(avg);runModeEls.gps.textContent=!r?.gpsEnabled?(state.settings.language==='ko'?'GPS 꺼짐':'GPS OFF'):r?.hasFix?(state.settings.language==='ko'?'GPS 연결':'GPS LIVE'):(state.settings.language==='ko'?'GPS 대기':'GPS WAITING');runModeEls.gps.className='run-mode-gps '+(r?.hasFix?'live':'');runModeEls.accuracy.textContent=`정확도 ${r?.accuracy?Math.round(r.accuracy):'--'}m`;runModeEls.status.textContent=r?.autoPaused?'자동 일시정지 중':r?.status==='paused'?'러닝 일시정지':r?.hasFix?'GPS 경로 기록 중':'GPS 신호를 찾는 중';runModeEls.pause.textContent=r?.status==='paused'?'▶ 다시 시작':'Ⅱ 일시정지'}
 const shareEls={
   dialog:document.getElementById('shareRunDialog'),photo:document.getElementById('sharePhotoInput'),ratio:document.getElementById('shareRatioSelect'),style:document.getElementById('shareStyleSelect'),
   caption:document.getElementById('shareCaptionInput'),canvas:document.getElementById('shareCanvas'),render:document.getElementById('renderShareBtn'),
@@ -460,16 +460,17 @@ function updateLiveRunMap(){
 function drawLiveRoute(){updateLiveRunMap()}
 
 function haversine(a,b){const R=6371000,toRad=x=>x*Math.PI/180,dLat=toRad(b.lat-a.lat),dLon=toRad(b.lon-a.lon),la1=toRad(a.lat),la2=toRad(b.lat);const q=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(q))}
+function formatDistance(distanceKm,{compact=false}={}){const km=Math.max(0,Number(distanceKm)||0);if(km<1){const metres=Math.round(km*1000);return compact?`${metres} m`:`${metres} m`}return `${km.toFixed(2)} km`}
 function elapsedMs(){if(!runSession)return 0;return runSession.elapsedBefore+(runSession.status==='running'?Date.now()-runSession.segmentStartedAt:0)}
 function movingMs(){if(!runSession)return 0;return (runSession.movingMs||0)+(runSession.status==='running'&&!runSession.autoPaused&&runSession.movingSegmentAt?Date.now()-runSession.movingSegmentAt:0)}
 function formatClock(ms){const sec=Math.max(0,Math.floor(ms/1000)),h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;return [h,m,s].map(x=>String(x).padStart(2,'0')).join(':')}
 function paceText(secPerKm){if(!Number.isFinite(secPerKm)||secPerKm<=0||secPerKm>3600)return `--'--"`;const m=Math.floor(secPerKm/60),s=Math.round(secPerKm%60);return `${m}'${String(s).padStart(2,'0')}"`}
 function runningScore(run){if(!run||!run.distanceKm)return 0;const pace=run.avgPaceSecKm||3600,distance=Math.min(run.distanceKm,10),pacePoints=Math.max(0,Math.min(65,(900-pace)/7)),distancePoints=Math.min(25,distance*3),finishPoints=run.durationMs>0?10:0;return Math.round(Math.max(0,Math.min(100,pacePoints+distancePoints+finishPoints)))}
-function renderLatestRunAnalysis(){const el=document.getElementById('latestRunAnalysis');if(!el)return;const runs=(state.runs||[]).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));const r=runs[0];if(!r){el.innerHTML='<div class="empty-state"><span>🏃</span><p>Complete a run to see pace, speed and performance insights here.</p></div>';return}const previous=runs[1],bestSplit=(r.splits||[]).map(x=>+x.seconds).filter(Number.isFinite).sort((a,b)=>a-b)[0],bestPace=bestSplit||r.avgPaceSecKm,avgSpeed=Number.isFinite(r.avgPaceSecKm)&&r.avgPaceSecKm>0?3600/r.avgPaceSecKm:0,delta=previous&&Number.isFinite(previous.avgPaceSecKm)?Math.round(previous.avgPaceSecKm-r.avgPaceSecKm):null,trend=delta===null?'첫 기록이 저장되었습니다.':delta>0?`이전 기록보다 ${delta}초/km 빨라졌어요.`:delta<0?`이전 기록보다 ${Math.abs(delta)}초/km 느려졌어요.`:'이전 기록과 같은 평균 페이스예요.';el.innerHTML=`<div class="latest-run-head"><div><p class="eyebrow">${new Date(r.endedAt).toLocaleDateString()}</p><h3>${r.distanceKm.toFixed(2)} km run</h3></div><span class="run-score-pill">${runningScore(r)} SCORE</span></div><div class="run-analysis-grid"><div><span>AVERAGE PACE</span><strong>${paceText(r.avgPaceSecKm)}</strong><small>/km</small></div><div><span>BEST PACE</span><strong>${paceText(bestPace)}</strong><small>/km</small></div><div><span>AVERAGE SPEED</span><strong>${avgSpeed.toFixed(1)}</strong><small>km/h</small></div><div><span>CALORIES</span><strong>${r.calories||0}</strong><small>kcal</small></div></div><p class="run-trend">${trend}</p>`}
+function renderLatestRunAnalysis(){const el=document.getElementById('latestRunAnalysis');if(!el)return;const runs=(state.runs||[]).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));const r=runs[0];if(!r){el.innerHTML='<div class="empty-state"><span>🏃</span><p>Complete a run to see pace, speed and performance insights here.</p></div>';return}const previous=runs[1],bestSplit=(r.splits||[]).map(x=>+x.seconds).filter(Number.isFinite).sort((a,b)=>a-b)[0],bestPace=bestSplit||r.avgPaceSecKm,avgSpeed=Number.isFinite(r.avgPaceSecKm)&&r.avgPaceSecKm>0?3600/r.avgPaceSecKm:0,delta=previous&&Number.isFinite(previous.avgPaceSecKm)?Math.round(previous.avgPaceSecKm-r.avgPaceSecKm):null,trend=delta===null?'첫 기록이 저장되었습니다.':delta>0?`이전 기록보다 ${delta}초/km 빨라졌어요.`:delta<0?`이전 기록보다 ${Math.abs(delta)}초/km 느려졌어요.`:'이전 기록과 같은 평균 페이스예요.';el.innerHTML=`<div class="latest-run-head"><div><p class="eyebrow">${new Date(r.endedAt).toLocaleDateString()}</p><h3>${formatDistance(r.distanceKm)} run</h3></div><span class="run-score-pill">${runningScore(r)} SCORE</span></div><div class="run-analysis-grid"><div><span>AVERAGE PACE</span><strong>${paceText(r.avgPaceSecKm)}</strong><small>/km</small></div><div><span>BEST PACE</span><strong>${paceText(bestPace)}</strong><small>/km</small></div><div><span>AVERAGE SPEED</span><strong>${avgSpeed.toFixed(1)}</strong><small>km/h</small></div><div><span>CALORIES</span><strong>${r.calories||0}</strong><small>kcal</small></div></div><p class="run-trend">${trend}</p>`}
 function runCalories(distanceKm){const weight=+state.settings.currentWeight||78;return Math.round(distanceKm*weight)}
 function renderRun(){
   const r=runSession,d=r?r.distanceM/1000:0,ms=r?elapsedMs():0,avg=d>0?(ms/1000)/d:Infinity;updateRunDocumentTitle();
-  runEls.time.textContent=formatClock(ms);runEls.distance.textContent=d.toFixed(2);runEls.averagePace.textContent=paceText(avg);
+  runEls.time.textContent=formatClock(ms);runEls.distance.textContent=d<1?Math.round(d*1000):d.toFixed(2);const runDistanceUnit=document.getElementById('runDistanceUnit');if(runDistanceUnit)runDistanceUnit.textContent=d<1?'m':'km';runEls.averagePace.textContent=paceText(avg);
   runEls.movingTime.textContent=formatClock(r?movingMs():0);runEls.topSpeed.textContent=((r?.topSpeedMps||0)*3.6).toFixed(1);runEls.quality.textContent=r?.gpsEnabled?gpsQualityLabel(r?.accuracy):(state.settings.language==='ko'?'GPS 꺼짐':'GPS OFF');drawLiveRoute();
   runEls.currentPace.textContent=paceText(r?.currentPace||Infinity);runEls.calories.textContent=runCalories(d);
   runEls.accuracy.textContent=r?.gpsEnabled?(r?.accuracy?Math.round(r.accuracy):'--'):'OFF';
@@ -499,7 +500,7 @@ function renderRun(){
     runEls.latestStory.onclick=latest?()=>openShareCard(latest.id):null;
   }
   const history=runHistoryExpanded?allHistory:allHistory.slice(0,2);
-  if(runEls.history) runEls.history.innerHTML=history.length?history.map(x=>`<div class="run-history-card"><button class="run-history-main" data-open-run-detail="${x.id}"><div><h3>${x.activityType==='walk'?(state.settings.language==='ko'?'걷기':'Walk'):(state.settings.language==='ko'?'러닝':'Run')} · ${new Date(x.endedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</h3><p>${formatClock(x.durationMs)} · ${paceText(x.avgPaceSecKm)}/km</p></div><strong class="history-distance">${x.distanceKm.toFixed(2)} km</strong></button><button class="mini-edit share-run-btn" data-run-id="${x.id}">${state.settings.language==='ko'?'인증샷 만들기':'Create story'}</button></div>`).join(''):'<div class="empty-state"><span>👟</span><p>No completed runs yet.</p></div>';
+  if(runEls.history) runEls.history.innerHTML=history.length?history.map(x=>`<div class="run-history-card"><button class="run-history-main" data-open-run-detail="${x.id}"><div><h3>${x.activityType==='walk'?(state.settings.language==='ko'?'걷기':'Walk'):(state.settings.language==='ko'?'러닝':'Run')} · ${new Date(x.endedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</h3><p>${formatClock(x.durationMs)} · ${paceText(x.avgPaceSecKm)}/km</p></div><strong class="history-distance">${formatDistance(x.distanceKm)}</strong></button><button class="mini-edit share-run-btn" data-run-id="${x.id}">${state.settings.language==='ko'?'인증샷 만들기':'Create story'}</button></div>`).join(''):'<div class="empty-state"><span>👟</span><p>No completed runs yet.</p></div>';
   if(runEls.historyToggle){
     runEls.historyToggle.hidden=allHistory.length<=2;
     runEls.historyToggle.textContent=runHistoryExpanded?((state.settings.language||'ko')==='ko'?'최근 2개만 보기':'Show recent 2'):((state.settings.language||'ko')==='ko'?'전체 기록 보기':'View all history');
@@ -549,43 +550,78 @@ function startGps(){if(!runSession?.gpsEnabled)return;if(!navigator.geolocation)
 function stopGps(){if(runWatchId!==null)navigator.geolocation.clearWatch(runWatchId);runWatchId=null}
 function onGps(pos){
   if(!runSession||runSession.status!=='running'||!runSession.gpsEnabled)return;
-  const c=pos.coords,p={lat:c.latitude,lon:c.longitude,t:pos.timestamp||Date.now(),accuracy:c.accuracy};
-  runSession.accuracy=c.accuracy;runSession.hasFix=true;if(c.accuracy>65){renderRun();return}
-  const prev=runSession.lastPoint;
-  if(prev){
-    const delta=haversine(prev,p),seconds=(p.t-prev.t)/1000,speed=seconds>0?delta/seconds:0;
-    runSession.speedSamples=(runSession.speedSamples||[]).concat(speed).slice(-5);
+  const c=pos.coords,p={lat:c.latitude,lon:c.longitude,t:pos.timestamp||Date.now(),accuracy:Number(c.accuracy)||999};
+  runSession.accuracy=p.accuracy;runSession.hasFix=true;
+  // Poor fixes create large jumps. Keep the UI status, but do not use them for distance.
+  if(p.accuracy>50){renderRun();return}
+
+  const observedPrev=runSession.lastPoint;
+  const distancePrev=runSession.distancePoint||observedPrev;
+  if(observedPrev){
+    const observedDelta=haversine(observedPrev,p),seconds=Math.max(.25,(p.t-observedPrev.t)/1000),instantSpeed=observedDelta/seconds;
+    const realisticMax=runSession.activityType==='walk'?4.5:12;
+    const speedSample=instantSpeed<=realisticMax?instantSpeed:0;
+    runSession.speedSamples=(runSession.speedSamples||[]).concat(speedSample).slice(-7);
     const sorted=[...runSession.speedSamples].sort((x,y)=>x-y),smooth=sorted[Math.floor(sorted.length/2)]||0;
+
     if(runSession.autoPauseEnabled){
-      if(smooth<.45){
+      const pauseThreshold=runSession.activityType==='walk'?.22:.45;
+      if(smooth<pauseThreshold){
         runSession.stillSince=runSession.stillSince||Date.now();
-        if(!runSession.autoPaused&&Date.now()-runSession.stillSince>6000){
+        if(!runSession.autoPaused&&Date.now()-runSession.stillSince>7000){
           runSession.autoPaused=true;
           if(runSession.movingSegmentAt){runSession.movingMs+=Date.now()-runSession.movingSegmentAt;runSession.movingSegmentAt=null}
         }
       }else{
         runSession.stillSince=null;
-        if(runSession.autoPaused){runSession.autoPaused=false;runSession.movingSegmentAt=Date.now();runSession.lastPoint=p;saveActiveRun();renderRun();return}
+        if(runSession.autoPaused){
+          runSession.autoPaused=false;runSession.movingSegmentAt=Date.now();
+          runSession.lastPoint=p;runSession.distancePoint=p;saveActiveRun();renderRun();return
+        }
       }
     }
-    if(delta>=1.5&&delta<100&&speed<12&&!runSession.autoPaused){
-      runSession.distanceM+=delta;runSession.currentPace=smooth>.5?1000/smooth:Infinity;runSession.topSpeedMps=Math.max(runSession.topSpeedMps||0,smooth);runSession.route.push({lat:p.lat,lon:p.lon});
-      const completed=Math.floor(runSession.distanceM/1000);
-      while(runSession.splits.length<completed){const totalSec=movingMs()/1000,previous=runSession.splits.reduce((n,x)=>n+x.seconds,0);runSession.splits.push({km:runSession.splits.length+1,seconds:Math.max(1,totalSec-previous)})}
+
+    if(distancePrev&&!runSession.autoPaused){
+      const delta=haversine(distancePrev,p);
+      const elapsed=Math.max(.25,(p.t-distancePrev.t)/1000);
+      const segmentSpeed=delta/elapsed;
+      // The previous implementation replaced the reference point on every GPS event.
+      // Sub-1.5 m walking steps were therefore discarded forever. Keep a separate
+      // accepted-distance point so small valid movements accumulate before inclusion.
+      const baseMin=runSession.activityType==='walk'?.55:.9;
+      const accuracyMin=Math.min(2.4,Math.max(0,p.accuracy*.06));
+      const minMove=Math.max(baseMin,accuracyMin);
+      const maxSegment=runSession.activityType==='walk'?45:80;
+      const maxSpeed=runSession.activityType==='walk'?4.5:12;
+      if(delta>=minMove&&delta<maxSegment&&segmentSpeed<=maxSpeed){
+        runSession.distanceM+=delta;
+        runSession.distancePoint=p;
+        runSession.currentPace=smooth>.3?1000/smooth:Infinity;
+        if(smooth>.3)runSession.topSpeedMps=Math.max(runSession.topSpeedMps||0,smooth);
+        runSession.route.push({lat:p.lat,lon:p.lon,accuracy:p.accuracy,t:p.t});
+        const completed=Math.floor(runSession.distanceM/1000);
+        while(runSession.splits.length<completed){
+          const totalSec=movingMs()/1000,previous=runSession.splits.reduce((n,x)=>n+x.seconds,0);
+          runSession.splits.push({km:runSession.splits.length+1,seconds:Math.max(1,totalSec-previous)})
+        }
+      }
     }
-  } else runSession.route.push({lat:p.lat,lon:p.lon});
+  }else{
+    runSession.route.push({lat:p.lat,lon:p.lon,accuracy:p.accuracy,t:p.t});
+    runSession.distancePoint=p
+  }
   runSession.lastPoint=p;saveActiveRun();renderRun()
 }
 function gpsError(err){runEls.gps.textContent=err?.code===1?'Location denied':'GPS unavailable';runEls.gps.className='gps-badge error';runEls.note.textContent=err?.code===1?'Allow location access or finish and restart with GPS switched off.':'Move outdoors, or restart with GPS switched off.'}
 function beginRun(){
   const gpsEnabled=runEls.gpsToggle.checked;
   if(gpsEnabled&&!window.isSecureContext)return alert('GPS requires HTTPS. Open the Vercel URL, or switch GPS off.');
-  runSession={status:'running',activityType:runEls.activityType?.value||'run',gpsEnabled,autoPauseEnabled:runEls.autoPause.checked,autoPaused:false,startedAt:new Date().toISOString(),segmentStartedAt:Date.now(),elapsedBefore:0,movingMs:0,movingSegmentAt:Date.now(),distanceM:0,lastPoint:null,currentPace:Infinity,topSpeedMps:0,accuracy:null,hasFix:false,speedSamples:[],splits:[],route:[]};saveActiveRun();
+  runSession={status:'running',activityType:runEls.activityType?.value||'run',gpsEnabled,autoPauseEnabled:runEls.autoPause.checked,autoPaused:false,startedAt:new Date().toISOString(),segmentStartedAt:Date.now(),elapsedBefore:0,movingMs:0,movingSegmentAt:Date.now(),distanceM:0,lastPoint:null,distancePoint:null,currentPace:Infinity,topSpeedMps:0,accuracy:null,hasFix:false,speedSamples:[],splits:[],route:[]};saveActiveRun();
   if(gpsEnabled)startGps();requestWakeLock();requestRunNoticePermission().then(ok=>{if(ok)showRunCompanionNotification(true)});runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000);renderRun();setTimeout(()=>enterRunMode(),120)
 }
 function togglePause(){
   if(!runSession)return;
-  if(runSession.status==='running'){runSession.elapsedBefore=elapsedMs();if(runSession.movingSegmentAt){runSession.movingMs=movingMs();runSession.movingSegmentAt=null}runSession.status='paused';runSession.autoPaused=false;runSession.lastPoint=null;stopGps();releaseWakeLock();clearRunCompanionNotification();saveActiveRun()}
+  if(runSession.status==='running'){runSession.elapsedBefore=elapsedMs();if(runSession.movingSegmentAt){runSession.movingMs=movingMs();runSession.movingSegmentAt=null}runSession.status='paused';runSession.autoPaused=false;runSession.lastPoint=null;runSession.distancePoint=null;stopGps();releaseWakeLock();clearRunCompanionNotification();saveActiveRun()}
   else{runSession.status='running';runSession.segmentStartedAt=Date.now();runSession.movingSegmentAt=Date.now();if(runSession.gpsEnabled)startGps();requestWakeLock();showRunCompanionNotification(true);saveActiveRun()}
   renderRun()
 }
@@ -663,7 +699,7 @@ async function renderShareCard(){
   if(style!=='photo'){const shade=ctx.createLinearGradient(0,0,0,h);shade.addColorStop(0,'rgba(0,0,0,.18)');shade.addColorStop(.48,'rgba(0,0,0,.08)');shade.addColorStop(1,'rgba(0,0,0,.88)');ctx.fillStyle=shade;ctx.fillRect(0,0,w,h)}
   if(style==='photo'){const routeW=w*.32*routeScale,routeH=h*.18*routeScale,routeX=L.route.x*w-routeW/2,routeY=L.route.y*h-routeH/2;drawRouteOverlay(ctx,r.route,routeX,routeY,routeW,routeH,true);shareBounds.route={x:routeX,y:routeY,w:routeW,h:routeH}}
   const logoX=L.logo.x*w,logoY=L.logo.y*h;ctx.textAlign='center';ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.046*logoScale)}px system-ui`;ctx.fillText('ELDYN',logoX,logoY);ctx.font=`700 ${Math.round(w*.015*logoScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.84)';ctx.fillText('MOVE FORWARD',logoX,logoY+w*.030*logoScale);shareBounds.logo={x:logoX-w*.13*logoScale,y:logoY-w*.05*logoScale,w:w*.26*logoScale,h:w*.09*logoScale};
-  const metricsX=L.metrics.x*w,metricsY=L.metrics.y*h;ctx.textAlign='left';ctx.shadowColor='rgba(0,0,0,.42)';ctx.shadowBlur=4;const activityLabel=r.activityType==='walk'?(state.settings.language==='ko'?'걷기':'WALK'):(state.settings.language==='ko'?'러닝':'RUN');const metricRows=[['DISTANCE',`${r.distanceKm.toFixed(2)} km`],['PACE',`${paceText(r.avgPaceSecKm)}/km`],['TIME',formatClock(r.durationMs)]];ctx.fillStyle='rgba(255,255,255,.86)';ctx.font=`800 ${Math.round(w*.020*textScale)}px system-ui`;ctx.fillText(activityLabel,metricsX,metricsY-w*.045);metricRows.forEach((row,i)=>{const yy=metricsY+i*h*.105;ctx.fillStyle='rgba(255,255,255,.78)';ctx.font=`700 ${Math.round(w*.019*textScale)}px system-ui`;ctx.fillText(row[0],metricsX,yy);ctx.fillStyle='#fff';ctx.font=`900 ${Math.round(w*.054*textScale)}px system-ui`;ctx.fillText(row[1],metricsX,yy+h*.041)});shareBounds.metrics={x:metricsX-w*.02,y:metricsY-w*.08*textScale,w:w*.44,h:h*.36};
+  const metricsX=L.metrics.x*w,metricsY=L.metrics.y*h;ctx.textAlign='left';ctx.shadowColor='rgba(0,0,0,.42)';ctx.shadowBlur=4;const activityLabel=r.activityType==='walk'?(state.settings.language==='ko'?'걷기':'WALK'):(state.settings.language==='ko'?'러닝':'RUN');const metricRows=[['DISTANCE',formatDistance(r.distanceKm)],['PACE',`${paceText(r.avgPaceSecKm)}/km`],['TIME',formatClock(r.durationMs)]];ctx.fillStyle='rgba(255,255,255,.86)';ctx.font=`800 ${Math.round(w*.020*textScale)}px system-ui`;ctx.fillText(activityLabel,metricsX,metricsY-w*.045);metricRows.forEach((row,i)=>{const yy=metricsY+i*h*.105;ctx.fillStyle='rgba(255,255,255,.78)';ctx.font=`700 ${Math.round(w*.019*textScale)}px system-ui`;ctx.fillText(row[0],metricsX,yy);ctx.fillStyle='#fff';ctx.font=`900 ${Math.round(w*.054*textScale)}px system-ui`;ctx.fillText(row[1],metricsX,yy+h*.041)});shareBounds.metrics={x:metricsX-w*.02,y:metricsY-w*.08*textScale,w:w*.44,h:h*.36};
   const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim(),captionX=L.caption.x*w,captionY=L.caption.y*h;ctx.font=`550 ${Math.round(w*.028*textScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.96)';ctx.fillText(caption.slice(0,64),captionX,captionY);shareBounds.caption={x:captionX-w*.02,y:captionY-w*.04,w:w*.82,h:w*.06};
   ctx.font=`650 ${Math.round(w*.019*textScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.82)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);ctx.shadowBlur=0;ctx.textAlign='left';if(style!=='photo'){ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)}
 }
