@@ -1,4 +1,4 @@
-const CACHE='eldyn-v1.2.9.6-run-walk-story-button';
+const CACHE='eldyn-v1.2.11-ios-resume-recovery';
 const RUN_NOTICE_TAG='eldyn-active-run';
 const ASSETS=['./','./index.html','./styles.css','./app.js','./config.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));

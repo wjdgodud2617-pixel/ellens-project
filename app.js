@@ -546,14 +546,52 @@ function updateRunDocumentTitle(){
   if(runSession?.status==='running')document.title=`${((runSession.distanceM||0)/1000).toFixed(2)} km · ${formatClock(elapsedMs())} · ELDYN`;
   else document.title='ELDYN — Move Forward';
 }
-function startGps(){if(!runSession?.gpsEnabled)return;if(!navigator.geolocation){return gpsError({message:'This browser does not support GPS.'})}runWatchId=navigator.geolocation.watchPosition(onGps,gpsError,{enableHighAccuracy:true,maximumAge:500,timeout:15000})}
+function startGps(){if(!runSession?.gpsEnabled)return;if(!navigator.geolocation){return gpsError({message:'This browser does not support GPS.'})}stopGps();runWatchId=navigator.geolocation.watchPosition(onGps,gpsError,{enableHighAccuracy:true,maximumAge:0,timeout:15000})}
 function stopGps(){if(runWatchId!==null)navigator.geolocation.clearWatch(runWatchId);runWatchId=null}
+function prepareRunForBackground(){
+  if(!runSession||runSession.status!=='running'||!runSession.gpsEnabled)return;
+  const anchor=runSession.distancePoint||runSession.lastPoint;
+  if(anchor)runSession.backgroundAnchor={...anchor};
+  runSession.backgroundedAt=Date.now();
+  runSession.pendingResumeBridge=true;
+  // iOS can suspend a PWA when the screen locks or another app opens. Clearing the
+  // watcher makes the foreground resume deterministic instead of leaving a dead ID.
+  stopGps();
+  saveActiveRun();
+}
+function recoverBackgroundGap(p){
+  if(!runSession?.pendingResumeBridge)return false;
+  const anchor=runSession.backgroundAnchor;
+  runSession.pendingResumeBridge=false;
+  runSession.backgroundAnchor=null;
+  const hiddenAt=Number(runSession.backgroundedAt)||p.t;
+  runSession.backgroundedAt=null;
+  if(!anchor||p.accuracy>50)return false;
+  const gapSec=Math.max(.25,(p.t-(anchor.t||hiddenAt))/1000);
+  const delta=haversine(anchor,p);
+  const maxSpeed=runSession.activityType==='walk'?4.5:12;
+  // We cannot collect continuous GPS while iOS suspends a PWA. On resume, recover the
+  // missing section as a straight-line bridge only when the displacement is plausible.
+  // Cap recovery to 30 minutes to avoid adding a stale jump after a long absence.
+  if(gapSec<=1800&&delta>=1&&delta/gapSec<=maxSpeed){
+    runSession.distanceM+=delta;
+    runSession.route.push({lat:p.lat,lon:p.lon,accuracy:p.accuracy,t:p.t,resumed:true});
+    const completed=Math.floor(runSession.distanceM/1000);
+    while(runSession.splits.length<completed){
+      const totalSec=movingMs()/1000,previous=runSession.splits.reduce((n,x)=>n+x.seconds,0);
+      runSession.splits.push({km:runSession.splits.length+1,seconds:Math.max(1,totalSec-previous)});
+    }
+  }
+  runSession.lastPoint=p;runSession.distancePoint=p;runSession.speedSamples=[];runSession.currentPace=Infinity;
+  return true;
+}
 function onGps(pos){
   if(!runSession||runSession.status!=='running'||!runSession.gpsEnabled)return;
   const c=pos.coords,p={lat:c.latitude,lon:c.longitude,t:pos.timestamp||Date.now(),accuracy:Number(c.accuracy)||999};
   runSession.accuracy=p.accuracy;runSession.hasFix=true;
   // Poor fixes create large jumps. Keep the UI status, but do not use them for distance.
   if(p.accuracy>50){renderRun();return}
+  if(recoverBackgroundGap(p)){saveActiveRun();renderRun();return}
 
   const observedPrev=runSession.lastPoint;
   const distancePrev=runSession.distancePoint||observedPrev;
@@ -750,15 +788,15 @@ runModeEls.pause?.addEventListener('click',()=>{togglePause();renderRunMode()});
 runModeEls.unlock?.addEventListener('pointerdown',()=>{clearTimeout(runModeUnlockTimer);runModeUnlockTimer=setTimeout(()=>setRunModeLocked(false),2000)});['pointerup','pointercancel','pointerleave'].forEach(ev=>runModeEls.unlock?.addEventListener(ev,()=>clearTimeout(runModeUnlockTimer)));
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){
-    if(runSession?.status==='running'){requestWakeLock();if(runSession.gpsEnabled&&runWatchId===null)startGps();renderRunMode()}
+    if(runSession?.status==='running'){requestWakeLock();if(runSession.gpsEnabled)startGps();renderRunMode()}
     clearRunCompanionNotification();
   }else{
     releaseWakeLock();
-    if(runSession?.status==='running')showRunCompanionNotification(true);
+    if(runSession?.status==='running'){prepareRunForBackground();showRunCompanionNotification(true)}
   }
   saveActiveRun();
 });
-window.addEventListener('pagehide',()=>{saveActiveRun();if(runSession?.status==='running')showRunCompanionNotification(true)});
+window.addEventListener('pagehide',()=>{if(runSession?.status==='running')prepareRunForBackground();saveActiveRun();if(runSession?.status==='running')showRunCompanionNotification(true)});
 window.addEventListener('beforeunload',saveActiveRun);
 setInterval(()=>{if(runSession){saveActiveRun();if(document.visibilityState==='hidden')showRunCompanionNotification()}},30000);restoreActiveRun();
 
