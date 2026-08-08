@@ -293,7 +293,9 @@
           <select id="shareEditTarget">
             <option value="auto">자동 선택</option>
             <option value="photo">사진 이동</option>
-            <option value="metrics">거리·페이스 이동</option>
+            <option value="distance">거리 이동</option>
+            <option value="pace">페이스 이동</option>
+            <option value="time">시간 이동</option>
             <option value="caption">캡션 이동</option>
             <option value="route">경로 이동</option>
             <option value="logo">로고 이동</option>
@@ -315,7 +317,7 @@
           </select>
         </label>
         <label class="memo-card"><span>Caption</span><textarea id="shareCaptionInput" rows="2" maxlength="90" placeholder="Today, I showed up. (ง •̀_•́)ง"></textarea></label>
-        <label class="field-card range-card"><span>Text size <output id="shareTextSizeValue">88%</output></span><input id="shareTextSize" type="range" min="50" max="180" value="88" /></label>
+        <label class="field-card range-card"><span>선택 텍스트 크기 <output id="shareTextSizeValue">88%</output></span><input id="shareTextSize" type="range" min="50" max="180" value="88" /></label>
         <label class="field-card range-card"><span>Route size <output id="shareRouteSizeValue">80%</output></span><input id="shareRouteSize" type="range" min="40" max="180" value="80" /></label>
         <label class="field-card range-card"><span>Logo size <output id="shareLogoSizeValue">88%</output></span><input id="shareLogoSize" type="range" min="40" max="180" value="88" /></label>
         <label class="field-card range-card"><span>Photo size <output id="sharePhotoSizeValue">100%</output></span><input id="sharePhotoSize" type="range" min="100" max="250" value="100" /></label>
@@ -328,7 +330,7 @@
         <button id="downloadShareBtn" type="button" class="primary-btn">Save image</button>
         <button id="nativeShareBtn" type="button" class="primary-btn">Share</button>
       </div>
-      <button type="submit" value="cancel" class="share-close-bottom">Close</button>
+      <button id="shareCloseBtn" type="submit" value="cancel" class="share-close-bottom">닫기</button>
     </form>
   </dialog>
 
@@ -393,7 +395,6 @@
 
   <dialog id="workoutStoryDialog" class="modal share-run-modal">
     <form method="dialog">
-      <button class="close-btn" value="cancel" aria-label="Close">×</button>
       <p class="eyebrow">ELDYN · WORKOUT STORY</p><h2 id="workoutStoryTitle">운동 인증샷</h2>
       <canvas id="workoutStoryCanvas" width="1080" height="1350"></canvas>
       <p class="story-studio-note">미리보기에서 사진 또는 선택한 텍스트를 손가락으로 이동하세요. 크기와 박스 너비도 조절할 수 있어요.</p>
@@ -411,6 +412,7 @@
         <label class="field-card"><span>상세 표시</span><select id="workoutStoryDetailMode"><option value="top3">주요 운동 3개</option><option value="all">전체 운동</option><option value="none">숨기기</option></select></label>
       </div>
       <div class="share-actions"><button id="resetWorkoutStoryLayoutBtn" type="button" class="secondary-btn">배치 초기화</button><button id="renderWorkoutStoryBtn" type="button" class="secondary-btn">미리보기</button><button id="downloadWorkoutStoryBtn" type="button" class="primary-btn">이미지 저장</button></div>
+      <button id="workoutStoryCloseBtn" type="submit" value="cancel" class="share-close-bottom">닫기</button>
     </form>
   </dialog>
 
