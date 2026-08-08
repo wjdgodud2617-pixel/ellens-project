@@ -43,6 +43,10 @@ const hyroxPlans={
 };
 
 const workoutCatalog={
+  activity:{label:'Running / Walking',icon:'🏃',plans:{
+    running:{name:'Running',meta:'GPS run · Outdoor / Indoor',exercises:[ex('wb-act-run','Running',1,30,0,'Cardio · Endurance','Run at a comfortable pace. GPS runs completed in the Run tab are checked automatically.','running workout')]},
+    walking:{name:'Walking',meta:'GPS walk · Outdoor / Indoor',exercises:[ex('wb-act-walk','Walking',1,30,0,'Cardio · Recovery','Walk at a comfortable pace. GPS walks completed in the Run tab are checked automatically.','walking workout')]}
+  }},
   strength:{label:'Strength',icon:'💪',plans:{
     lower:{name:'Lower Body Strength',meta:'55–70 min · Intermediate · Barbell / Dumbbell',exercises:[ex('wb-l-squat','Back Squat',4,8,35,'Quads · Glutes · Core','Brace, keep feet grounded, and drive up with control.','back squat form'),ex('wb-l-rdl','Romanian Deadlift',4,10,30,'Hamstrings · Glutes','Push hips back and keep the weight close.','romanian deadlift form'),ex('wb-l-lunge','Reverse Lunge',3,10,8,'Glutes · Quads','Step back softly and keep the front knee aligned.','reverse lunge form'),ex('wb-l-hip','Hip Thrust',4,12,35,'Glutes','Pause at full hip extension.','hip thrust form')]},
     upper:{name:'Upper Body Strength',meta:'50–65 min · Intermediate · Bench / Dumbbell',exercises:[ex('wb-u-bench','Bench Press',4,8,20,'Chest · Triceps','Keep shoulder blades set and lower with control.','bench press form'),ex('wb-u-row','Seated Cable Row',4,10,25,'Back · Biceps','Pull elbows toward the ribs.','cable row form'),ex('wb-u-press','Shoulder Press',3,10,8,'Shoulders · Triceps','Keep ribs down while pressing.','shoulder press form'),ex('wb-u-pull','Lat Pulldown',3,12,25,'Lats · Biceps','Avoid leaning too far back.','lat pulldown form')]},
@@ -213,26 +217,73 @@ function renderDashboardRunCard(){
 
 function renderDailyReview(log){
   const el=document.getElementById('dailyReviewCard');if(!el)return;
-  const lang=state.settings.language||'ko',target=calculateNutrition(),meals=ensureMeals(log,activeDate),food=dailyFoodTotals(meals),exerciseDone=(log.exercises||[]).filter(x=>x.done).length,exerciseTotal=(log.exercises||[]).length||1;
-  const nutritionScore=Math.min(100,Math.round((food.kcal||log.calories||0)/Math.max(1,target.kcal)*100)),workoutScore=Math.round(exerciseDone/exerciseTotal*100),waterScore=Math.min(100,Math.round((log.water||0)/Math.max(1,state.settings.waterGoal)*100)),sleepScore=Math.min(100,Math.round((log.sleep||0)/Math.max(1,state.settings.sleepGoal)*100)),total=Math.round(workoutScore*.35+nutritionScore*.35+waterScore*.15+sleepScore*.15);
-  const hasFood=(food.kcal||0)>0||(+log.calories||0)>0||(+log.protein||0)>0,hasWater=(+log.water||0)>0,hasSleep=(+log.sleep||0)>0,hasWorkout=exerciseDone>0,hasAny=hasFood||hasWater||hasSleep||hasWorkout;
+  const lang=state.settings.language||'ko';
+  const target=calculateNutrition();
+  const meals=ensureMeals(log,activeDate);
+  const food=dailyFoodTotals(meals);
+  const kcalNow=(food.kcal||+log.calories||0);
+  const proteinNow=(food.protein||+log.protein||0);
+  const kcalScore=Math.min(100,Math.round(kcalNow/Math.max(1,target.kcal)*100));
+  const proteinScore=Math.min(100,Math.round(proteinNow/Math.max(1,target.protein)*100));
+  // Nutrition represents both total intake and protein, not calories alone.
+  const nutritionScore=Math.round(kcalScore*.5+proteinScore*.5);
+
+  const exercises=Array.isArray(log.exercises)?log.exercises:[];
+  const exerciseDone=exercises.filter(x=>x.done).length;
+  const planWorkoutScore=exercises.length?Math.round(exerciseDone/exercises.length*100):0;
+  const hasCompletedRun=(log.runs||[]).some(r=>(+r.distanceKm||0)>=.1||(+r.movingDurationMs||+r.durationMs||0)>=300000);
+  // A meaningful completed run/walk counts as today's workout as well.
+  const workoutScore=Math.max(planWorkoutScore,hasCompletedRun?100:0);
+  const waterScore=Math.min(100,Math.round((+log.water||0)/Math.max(1,state.settings.waterGoal)*100));
+  const sleepScore=Math.min(100,Math.round((+log.sleep||0)/Math.max(1,state.settings.sleepGoal)*100));
+  const total=Math.round(workoutScore*.35+nutritionScore*.35+waterScore*.15+sleepScore*.15);
+
+  const hasFood=kcalNow>0||proteinNow>0;
+  const hasWater=(+log.water||0)>0;
+  const hasSleep=(+log.sleep||0)>0;
+  const hasWorkout=exerciseDone>0||hasCompletedRun;
+  const hasAny=hasFood||hasWater||hasSleep||hasWorkout;
+
   let tip;
-  if(!hasAny){tip=lang==='ko'?'오늘도 화이팅!':'You’ve got this today!'}
-  else{
-    const gaps=[];
-    if(hasFood){gaps.push({gap:Math.max(0,1-(food.protein||log.protein||0)/Math.max(1,target.protein)),ko:'단백질을 조금 더 보충해 보세요.',en:'Add a little more protein today.'});gaps.push({gap:Math.max(0,1-(food.kcal||log.calories||0)/Math.max(1,target.kcal)),ko:'오늘의 식사량이 목표보다 부족해요.',en:'Your food intake is still below today’s target.'})}
-    if(hasWater)gaps.push({gap:Math.max(0,1-(+log.water||0)/Math.max(1,state.settings.waterGoal)),ko:'수분 섭취를 조금 더 채워 주세요.',en:'Drink a little more water to reach your goal.'});
-    if(hasSleep)gaps.push({gap:Math.max(0,1-(+log.sleep||0)/Math.max(1,state.settings.sleepGoal)),ko:'수면 시간이 목표보다 부족해요.',en:'Your sleep is still below your target.'});
-    if(hasWorkout)gaps.push({gap:Math.max(0,1-workoutScore/100),ko:'남은 운동을 마무리하면 오늘의 흐름이 더 좋아져요.',en:'Finish the remaining workout to complete today’s momentum.'});
-    gaps.sort((a,b)=>b.gap-a.gap);const best=gaps.find(x=>x.gap>.05);tip=best?(lang==='ko'?best.ko:best.en):(lang==='ko'?'오늘의 균형이 좋습니다. 잘하고 있어요!':'Your balance looks good today. Keep it going!');
+  if(!hasAny){
+    tip=lang==='ko'?'오늘도 화이팅!':'You’ve got this today!';
+  }else{
+    const categories=[
+      {key:'workout',score:workoutScore,order:0},
+      {key:'water',score:waterScore,order:1},
+      {key:'nutrition',score:nutritionScore,order:2},
+      {key:'sleep',score:sleepScore,order:3}
+    ].sort((a,b)=>a.score-b.score||a.order-b.order);
+    const lowest=categories[0];
+
+    if(lowest.score>=85){
+      tip=lang==='ko'?'오늘의 균형이 좋습니다. 잘하고 있어요!':'Your balance looks good today. Keep it going!';
+    }else if(lowest.key==='workout'){
+      tip=lang==='ko'?'오늘은 가볍게라도 몸을 움직여보세요!':'A little movement would be great today!';
+    }else if(lowest.key==='water'){
+      tip=lang==='ko'?'수분 섭취가 부족해요. 물을 조금 더 마셔주세요.':'You’re a little low on water. Have some more today.';
+    }else if(lowest.key==='sleep'){
+      tip=lang==='ko'?'수면 시간이 목표보다 부족해요. 오늘은 회복도 챙겨주세요.':'Your sleep is below target. Give recovery some attention today.';
+    }else{
+      const proteinGap=Math.max(0,1-proteinNow/Math.max(1,target.protein));
+      const kcalGap=Math.max(0,1-kcalNow/Math.max(1,target.kcal));
+      if(proteinGap>kcalGap+.05){
+        tip=lang==='ko'?'단백질 섭취가 부족해요. 다음 식사에서 조금 보충해보세요.':'Protein is running low. Add a little more at your next meal.';
+      }else{
+        tip=lang==='ko'?'오늘의 식사량이 목표보다 부족해요. 균형 있게 조금 더 채워보세요.':'Your food intake is still below target. Add a little more balanced nutrition.';
+      }
+    }
   }
-  el.innerHTML=`<div class="daily-review-head"><div><p class="eyebrow">TODAY REVIEW</p><h3>${total}${lang==='ko'?'점':' / 100'}</h3></div><span>${total>=85?'🔥':total>=65?'🙂':'🌱'}</span></div><div class="review-grid"><div><small>${lang==='ko'?'운동':'Workout'}</small><b>${workoutScore}</b></div><div><small>${lang==='ko'?'식단':'Nutrition'}</small><b>${nutritionScore}</b></div><div><small>${lang==='ko'?'수분':'Water'}</small><b>${waterScore}</b></div><div><small>${lang==='ko'?'수면':'Sleep'}</small><b>${sleepScore}</b></div></div><p>${tip}</p>`
+
+  const reviewLabel=lang==='ko'?'오늘 평가':'TODAY REVIEW';
+  const totalLabel=lang==='ko'?`${total}점`:`${total} / 100`;
+  el.innerHTML=`<div class="daily-review-head"><div><p class="eyebrow">${reviewLabel}</p><h3>${totalLabel}</h3></div><span>${total>=85?'🔥':total>=65?'🙂':'🌱'}</span></div><div class="review-grid"><div><small>${lang==='ko'?'운동':'Workout'}</small><b>${workoutScore}</b></div><div><small>${lang==='ko'?'식단':'Nutrition'}</small><b>${nutritionScore}</b></div><div><small>${lang==='ko'?'수분':'Water'}</small><b>${waterScore}</b></div><div><small>${lang==='ko'?'수면':'Sleep'}</small><b>${sleepScore}</b></div></div><p>${tip}</p>`
 }
 function renderToday(){const log=getLog(activeDate);renderDashboardRunCard();renderDailyReview(log);autoPriorities(log);const score=scoreFor(log),m=mood(score),d=dateFromKey(activeDate),isToday=activeDate===todayKey();scoreValue.textContent=`${score}%`;scoreEmoji.textContent=m.emoji;coachLine.textContent=m.line;scoreRing.style.setProperty('--score',score);scoreRing.querySelector('span').textContent=score;workoutDayLabel.textContent=isToday?(state.settings.language==='ko'?'오늘':'TODAY'):new Intl.DateTimeFormat(state.settings.language==='ko'?'ko-KR':'en',{weekday:'long'}).format(d).toUpperCase();workoutDateLabel.textContent=new Intl.DateTimeFormat('en',{month:'short',day:'numeric',year:'numeric'}).format(d);routineName.textContent=localizeWorkoutName(log.planName||weeklyPlan[d.getDay()].name);workoutHeading.textContent=state.settings.language==='ko'?(isToday?'오늘의 운동':'선택한 날짜의 운동'):(isToday?"Today's workout":"Day workout");todayWorkoutBtn.hidden=isToday;renderMeals(log);renderLatestRunAnalysis();
  const defs=[['workout','Workout','Complete every exercise','🏋️'],['nutrition','Nutrition','Log calories and protein','🥗'],['water','Water',`${log.water}/${state.settings.waterGoal} ml`,'💧'],['sleep','Sleep',`${log.sleep}/${state.settings.sleepGoal} h`,'🌙']];priorityGrid.innerHTML=defs.map(([k,t,s,e])=>`<button class="priority-card ${log.priorities[k]?'done':''}" data-priority="${k}"><span>${e}</span><b>${t}</b><small>${s}</small></button>`).join('');
  workoutList.innerHTML=log.exercises.length?log.exercises.map((x,i)=>`<article class="exercise-card ${x.done?'done':''}"><input class="check" type="checkbox" data-ex-check="${i}" ${x.done?'checked':''} aria-label="Complete ${escapeHtml(x.name)}"><button class="text-btn exercise-open" data-ex-open="${i}" style="text-align:left"><h3>${escapeHtml(localizeWorkoutName(x.name))}</h3><p>${x.sets}${state.settings.language==='ko'?'세트':' sets'} × ${x.reps}${state.settings.language==='ko'?'회':' reps'}${x.weight?` · ${x.weight} kg`:''}</p></button><button class="mini-edit" data-ex-edit="${i}" aria-label="${state.settings.language==='ko'?'수정':'Edit'} ${escapeHtml(localizeWorkoutName(x.name))}">${state.settings.language==='ko'?'수정':'Edit'}</button></article>`).join(''):'<div class="empty-state"><span>🧘</span><p>No exercises scheduled.</p><button class="text-btn" data-empty-add>+ Add an exercise</button></div>';
  waterInput.value=log.water||'';sleepInput.value=log.sleep||'';calorieInput.value=log.calories||'';proteinInput.value=log.protein||'';memoInput.value=log.memo||'';if(isToday)maybeCelebrate(score)}
-function autoPriorities(l){l.priorities=l.priorities||{};l.priorities.workout=l.exercises.length>0&&l.exercises.every(x=>x.done);l.priorities.water=+l.water>=+state.settings.waterGoal;l.priorities.sleep=+l.sleep>=+state.settings.sleepGoal;l.priorities.nutrition=+l.calories>0&&+l.protein>0}
+function autoPriorities(l){l.priorities=l.priorities||{};const hasCompletedRun=Array.isArray(l.runs)&&l.runs.some(r=>(+r.distanceKm||0)>=.02&&(+r.durationMs||0)>0);l.priorities.workout=hasCompletedRun||(l.exercises.length>0&&l.exercises.every(x=>x.done));l.priorities.water=+l.water>=+state.settings.waterGoal;l.priorities.sleep=+l.sleep>=+state.settings.sleepGoal;l.priorities.nutrition=+l.calories>0&&+l.protein>0}
 function updateLog(patch,date=activeDate){Object.assign(getLog(date),patch,{updatedAt:new Date().toISOString()});saveState();render()}
 function maybeCelebrate(s){const k=todayKey();if(s===100&&state.lastCelebrated[k]!==100){showCelebration(s);state.lastCelebrated[k]=100;saveState()}}
 function showCelebration(s){const m=mood(s);celebrationContent.innerHTML=`<div class="big-emoji">${m.emoji}</div><h2>${m.title}</h2><p>${m.line}</p><p class="slogan">Smile. Train. Become the Machine.</p>`;celebrationDialog.showModal();if(s===100)confetti()}
@@ -246,11 +297,11 @@ const KO_WORKOUT_NAMES={
  'HYROX Full Simulation':'하이록스 풀 시뮬레이션','HYROX Half Session':'하이록스 하프 세션','HYROX Beginner':'하이록스 입문','HYROX Strength Focus':'하이록스 근력 집중','HYROX Engine Focus':'하이록스 엔진 집중','HYROX / Full Body':'하이록스·전신',
  'Full Body Metcon':'전신 메트콘','Kettlebell Conditioning':'케틀벨 컨디셔닝','Bodyweight Circuit':'맨몸 서킷','Row & SkiErg':'로잉·스키에르그',
  'Full Body Mobility':'전신 모빌리티','Stretching':'스트레칭','Active Recovery':'액티브 리커버리','Rest Day':'휴식',
- 'Treadmill':'트레드밀','Stair Climber':'계단 오르기','Stepmill':'스텝밀','Indoor Cycling':'실내 사이클','Outdoor Cycling':'실외 사이클','Elliptical':'일립티컬','Rowing Machine':'로잉머신','Jump Rope':'줄넘기','Swimming':'수영','Hiking':'등산','Walking':'걷기',
+ 'Running':'러닝','Treadmill':'트레드밀','Stair Climber':'계단 오르기','Stepmill':'스텝밀','Indoor Cycling':'실내 사이클','Outdoor Cycling':'실외 사이클','Elliptical':'일립티컬','Rowing Machine':'로잉머신','Jump Rope':'줄넘기','Swimming':'수영','Hiking':'등산','Walking':'걷기',
  'Deadlift':'데드리프트','Goblet Squat':'고블릿 스쿼트','Leg Curl':'레그 컬','Standing Calf Raise':'스탠딩 카프 레이즈','Dead Bug':'데드버그','Back Squat':'백 스쿼트','Romanian Deadlift':'루마니안 데드리프트','Reverse Lunge':'리버스 런지','Hip Thrust':'힙 쓰러스트','Bench Press':'벤치프레스','Seated Cable Row':'시티드 케이블 로우','Shoulder Press':'숄더 프레스','Lat Pulldown':'랫 풀다운','Dumbbell Bench Press':'덤벨 벤치프레스','One-arm Row':'원암 로우','Farmer Carry':'파머스 캐리','Farmers Carry':'파머스 캐리','Bulgarian Split Squat':'불가리안 스플릿 스쿼트','Band Abduction':'밴드 어브덕션','Incline Dumbbell Press':'인클라인 덤벨프레스','Triceps Pushdown':'트라이셉스 푸시다운','Cable Row':'케이블 로우','Face Pull':'페이스 풀','Dumbbell Curl':'덤벨 컬','Warm-up Jog':'워밍업 조깅','Tempo Run':'템포 러닝','Cool-down Jog':'쿨다운 조깅','Warm-up':'워밍업','400 m Intervals':'400m 인터벌','Cool-down':'쿨다운','Hill Repeats':'언덕 반복주','Row Erg':'로잉 에르그','Burpee Broad Jump':'버피 브로드 점프','Walking Lunge':'워킹 런지','Wall Ball':'월볼','Sled Push':'슬레드 푸시','Sled Pull':'슬레드 풀','Sandbag Lunges':'샌드백 런지','Wall Balls':'월볼','SkiErg 750 m':'스키에르그 750m','Row 750 m':'로잉 750m','Dumbbell Thruster':'덤벨 스러스터','Row':'로잉','Burpees':'버피','Kettlebell Swing':'케틀벨 스윙','Suitcase Carry':'수트케이스 캐리','Air Squat':'에어 스쿼트','Push-up':'푸시업','Mountain Climbers':'마운틴 클라이머','Plank':'플랭크','Row 500 m':'로잉 500m','SkiErg 500 m':'스키에르그 500m','Full Body Stretch':'전신 스트레칭','Recovery Walk':'회복 걷기'
 };
 
-const KO_CATEGORY_NAMES={Strength:'근력',Running:'러닝',Cardio:'유산소',HYROX:'하이록스',CrossFit:'크로스핏',Conditioning:'크로스핏',Recovery:'회복'};
+const KO_CATEGORY_NAMES={'Running / Walking':'러닝·걷기',Strength:'근력',Running:'러닝',Cardio:'유산소',HYROX:'하이록스',CrossFit:'크로스핏',Conditioning:'크로스핏',Recovery:'회복'};
 function localizeWorkoutName(name){return (state.settings.language||'ko')==='ko'?(KO_WORKOUT_NAMES[name]||name):name}
 function localizeCategoryName(name){return (state.settings.language||'ko')==='ko'?(KO_CATEGORY_NAMES[name]||name):name}
 function localizeMealName(key,fallback=''){if((state.settings.language||'ko')!=='ko')return fallback||key;return({breakfast:'아침',lunch:'점심',snack:'간식',dinner:'저녁'}[key]||fallback||key)}
@@ -694,7 +745,10 @@ function finishRun(){
       avgPaceSecKm:((movingDurationMs||durationMs)/1000)/distanceKm,calories:runCalories(distanceKm),splits:runSession.splits,
       movingDurationMs,topSpeedKmh:(runSession.topSpeedMps||0)*3.6,route:runSession.route||[],gpsEnabled:runSession.gpsEnabled,autoPauseEnabled:runSession.autoPauseEnabled};
     state.runs=state.runs||[];state.runs.push(record);
-    const runDate=todayKey();const log=getLog(runDate);log.runs=mergeRuns(log.runs,[record]);log.priorities.workout=true;log.updatedAt=new Date().toISOString();saveState();
+    const runDate=todayKey();const log=getLog(runDate);log.runs=mergeRuns(log.runs,[record]);
+    const activityName=record.activityType==='walk'?'Walking':'Running';
+    if(!log.exercises.some(x=>x.runRecordId===record.id))log.exercises.push({id:`gps-${record.id}`,runRecordId:record.id,name:activityName,sets:1,reps:Math.max(1,Math.round(record.durationMs/60000)),weight:0,target:'Cardio · Endurance',instructions:`${formatDistance(record.distanceKm)} · ${formatClock(record.durationMs)} · ${paceText(record.avgPaceSecKm)}/km`,youtube:'',search:'',done:true,gpsActivity:true});
+    log.priorities.workout=true;log.updatedAt=new Date().toISOString();saveState();
     saveDailyLogNow(runDate,{verify:false}).catch(()=>{});
     const savedId=record.id;runSession=null;saveActiveRun();renderRun();renderToday();openShareCard(savedId)
   } else {runSession=null;saveActiveRun();renderRun()}
@@ -823,11 +877,33 @@ window.addEventListener('beforeunload',saveActiveRun);
 setInterval(()=>{if(runSession){saveActiveRun();if(document.visibilityState==='hidden')showRunCompanionNotification()}},30000);restoreActiveRun();
 
 const workoutStory={
-  dialog:document.getElementById('workoutStoryDialog'),canvas:document.getElementById('workoutStoryCanvas'),photo:document.getElementById('workoutStoryPhoto'),type:document.getElementById('workoutStoryType'),duration:document.getElementById('workoutStoryDuration'),caption:document.getElementById('workoutStoryCaption'),details:document.getElementById('workoutStoryDetails'),editTarget:document.getElementById('workoutStoryEditTarget'),textSize:document.getElementById('workoutStoryTextSize'),width:document.getElementById('workoutStoryWidth'),photoSize:document.getElementById('workoutStoryPhotoSize'),detailMode:document.getElementById('workoutStoryDetailMode'),textSizeValue:document.getElementById('workoutStoryTextSizeValue'),widthValue:document.getElementById('workoutStoryWidthValue'),photoSizeValue:document.getElementById('workoutStoryPhotoSizeValue'),reset:document.getElementById('resetWorkoutStoryLayoutBtn')
+  dialog:document.getElementById('workoutStoryDialog'),canvas:document.getElementById('workoutStoryCanvas'),photo:document.getElementById('workoutStoryPhoto'),type:document.getElementById('workoutStoryType'),duration:document.getElementById('workoutStoryDuration'),caption:document.getElementById('workoutStoryCaption'),details:document.getElementById('workoutStoryDetails'),editTarget:document.getElementById('workoutStoryEditTarget'),width:document.getElementById('workoutStoryWidth'),photoSize:document.getElementById('workoutStoryPhotoSize'),detailMode:document.getElementById('workoutStoryDetailMode'),widthValue:document.getElementById('workoutStoryWidthValue'),photoSizeValue:document.getElementById('workoutStoryPhotoSizeValue'),reset:document.getElementById('resetWorkoutStoryLayoutBtn'),
+  sizeInputs:{
+    title:document.getElementById('workoutStoryTitleSize'),summary:document.getElementById('workoutStorySummarySize'),details:document.getElementById('workoutStoryDetailsSize'),caption:document.getElementById('workoutStoryCaptionSize'),watermark:document.getElementById('workoutStoryWatermarkSize')
+  },
+  sizeValues:{
+    title:document.getElementById('workoutStoryTitleSizeValue'),summary:document.getElementById('workoutStorySummarySizeValue'),details:document.getElementById('workoutStoryDetailsSizeValue'),caption:document.getElementById('workoutStoryCaptionSizeValue'),watermark:document.getElementById('workoutStoryWatermarkSizeValue')
+  }
 };
 const defaultWorkoutStoryLayout={title:{x:.065,y:.58},summary:{x:.065,y:.68},details:{x:.065,y:.77},caption:{x:.065,y:.94},watermark:{x:.065,y:.085}};
+const defaultWorkoutStoryTextSizes={title:100,summary:100,details:100,caption:100,watermark:100};
 let workoutStoryImage=null,workoutStoryPhotoTransform={x:0,y:0,zoom:1},workoutStoryDrag=null,workoutStoryBounds={};
 function workoutStoryLayout(){state.settings.workoutStoryLayout=state.settings.workoutStoryLayout||JSON.parse(JSON.stringify(defaultWorkoutStoryLayout));return state.settings.workoutStoryLayout}
+function workoutStoryTextSizes(){
+  state.settings.workoutStoryTextSizes=state.settings.workoutStoryTextSizes||{...defaultWorkoutStoryTextSizes};
+  for(const key of Object.keys(defaultWorkoutStoryTextSizes)){
+    const n=+state.settings.workoutStoryTextSizes[key];
+    state.settings.workoutStoryTextSizes[key]=Number.isFinite(n)?Math.max(55,Math.min(180,n)):defaultWorkoutStoryTextSizes[key];
+  }
+  return state.settings.workoutStoryTextSizes
+}
+function syncWorkoutStorySizeControls(){
+  const sizes=workoutStoryTextSizes();
+  for(const key of Object.keys(defaultWorkoutStoryTextSizes)){
+    if(workoutStory.sizeInputs[key])workoutStory.sizeInputs[key].value=String(sizes[key]);
+    if(workoutStory.sizeValues[key])workoutStory.sizeValues[key].textContent=`${sizes[key]}%`;
+  }
+}
 function workoutStoryExercises(){const log=getLog(activeDate),all=(log.exercises||[]),done=all.filter(x=>x.done);return done.length?done:all}
 function workoutStoryDetailText(){
   const exs=workoutStoryExercises(),mode=workoutStory.detailMode?.value||'top3',list=mode==='none'?[]:(mode==='all'?exs:exs.slice(0,3));
@@ -840,27 +916,29 @@ function syncWorkoutStoryDetails(force=false){if(force||!workoutStory.details.va
 function coverWorkoutStoryImage(ctx,img,w,h){const z=Math.max(1,workoutStoryPhotoTransform.zoom||1),scale=Math.max(w/img.width,h/img.height)*z,sw=w/scale,sh=h/scale,maxX=Math.max(0,(img.width-sw)/2),maxY=Math.max(0,(img.height-sh)/2),sx=Math.max(0,Math.min(img.width-sw,(img.width-sw)/2-(workoutStoryPhotoTransform.x||0)*maxX)),sy=Math.max(0,Math.min(img.height-sh,(img.height-sh)/2-(workoutStoryPhotoTransform.y||0)*maxY));ctx.drawImage(img,sx,sy,sw,sh,0,0,w,h)}
 function wrapWorkoutText(ctx,text,maxWidth){const lines=[];for(const raw of String(text||'').split(/\n/)){const words=raw.split(/\s+/);let line='';for(const word of words){const test=line?`${line} ${word}`:word;if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=word}else line=test}if(line)lines.push(line)}return lines}
 function drawWorkoutStory(){
-  const c=workoutStory.canvas;if(!c)return;const ctx=c.getContext('2d'),w=c.width,h=c.height,L=workoutStoryLayout(),scale=(+workoutStory.textSize?.value||100)/100,boxW=w*((+workoutStory.width?.value||76)/100);workoutStoryBounds={};
+  const c=workoutStory.canvas;if(!c)return;const ctx=c.getContext('2d'),w=c.width,h=c.height,L=workoutStoryLayout(),sizes=workoutStoryTextSizes(),boxW=w*((+workoutStory.width?.value||76)/100);workoutStoryBounds={};
   if(workoutStoryImage)coverWorkoutStoryImage(ctx,workoutStoryImage,w,h);else{ctx.fillStyle='#0a0d0b';ctx.fillRect(0,0,w,h)}
   const g=ctx.createLinearGradient(0,h*.35,0,h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.78)');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);ctx.textBaseline='alphabetic';ctx.shadowColor='rgba(0,0,0,.5)';ctx.shadowBlur=5;
-  const title=localizeWorkoutName(workoutStory.type.value).toUpperCase(),tx=L.title.x*w,ty=L.title.y*h;ctx.fillStyle='#fff';ctx.font=`900 ${Math.round(88*scale)}px system-ui`;ctx.fillText(title,tx,ty,boxW);workoutStoryBounds.title={x:tx-20,y:ty-100*scale,w:Math.min(boxW,ctx.measureText(title).width+40),h:120*scale};
-  const exCount=workoutStoryExercises().length,summary=`${workoutStory.duration.value||45} MIN · ${exCount} ${state.settings.language==='en'?'EXERCISES':'종목'}`,sx=L.summary.x*w,sy=L.summary.y*h;ctx.fillStyle='#39ff14';ctx.font=`800 ${Math.round(42*scale)}px system-ui`;ctx.fillText(summary,sx,sy,boxW);workoutStoryBounds.summary={x:sx-15,y:sy-52*scale,w:Math.min(boxW,ctx.measureText(summary).width+30),h:68*scale};
-  const detail=(workoutStory.details.value||'').trim(),dx=L.details.x*w,dy=L.details.y*h;ctx.fillStyle='rgba(255,255,255,.96)';ctx.font=`650 ${Math.round(31*scale)}px system-ui`;const detailLines=wrapWorkoutText(ctx,detail,boxW),lineH=42*scale;detailLines.slice(0,8).forEach((line,i)=>ctx.fillText(line,dx,dy+i*lineH,boxW));workoutStoryBounds.details={x:dx-15,y:dy-40*scale,w:boxW+30,h:Math.max(55,detailLines.length*lineH+20)};
-  const cap=(workoutStory.caption.value||'오늘도 해냈다.').trim(),cx=L.caption.x*w,cy=L.caption.y*h;ctx.fillStyle='rgba(255,255,255,.9)';ctx.font=`500 ${Math.round(30*scale)}px system-ui`;const capLines=wrapWorkoutText(ctx,cap,boxW);capLines.slice(0,3).forEach((line,i)=>ctx.fillText(line,cx,cy+i*38*scale,boxW));workoutStoryBounds.caption={x:cx-15,y:cy-38*scale,w:boxW+30,h:Math.max(50,capLines.length*38*scale+15)};
-  const wx=L.watermark.x*w,wy=L.watermark.y*h;ctx.textAlign='left';ctx.fillStyle='#39ff14';ctx.font=`900 ${Math.round(34*scale)}px system-ui`;ctx.fillText('ELDYN',wx,wy);ctx.fillStyle='rgba(255,255,255,.82)';ctx.font=`700 ${Math.round(15*scale)}px system-ui`;ctx.fillText('MOVE FORWARD',wx,wy+24*scale);workoutStoryBounds.watermark={x:wx-10,y:wy-42*scale,w:220*scale,h:75*scale};ctx.shadowBlur=0
+  const titleScale=sizes.title/100,title=localizeWorkoutName(workoutStory.type.value).toUpperCase(),tx=L.title.x*w,ty=L.title.y*h;ctx.fillStyle='#fff';ctx.font=`900 ${Math.round(88*titleScale)}px system-ui`;ctx.fillText(title,tx,ty,boxW);workoutStoryBounds.title={x:tx-20,y:ty-100*titleScale,w:Math.min(boxW,ctx.measureText(title).width+40),h:120*titleScale};
+  const summaryScale=sizes.summary/100,exCount=workoutStoryExercises().length,summary=`${workoutStory.duration.value||45} MIN · ${exCount} ${state.settings.language==='en'?'EXERCISES':'종목'}`,sx=L.summary.x*w,sy=L.summary.y*h;ctx.fillStyle='#39ff14';ctx.font=`800 ${Math.round(42*summaryScale)}px system-ui`;ctx.fillText(summary,sx,sy,boxW);workoutStoryBounds.summary={x:sx-15,y:sy-52*summaryScale,w:Math.min(boxW,ctx.measureText(summary).width+30),h:68*summaryScale};
+  const detailsScale=sizes.details/100,detail=(workoutStory.details.value||'').trim(),dx=L.details.x*w,dy=L.details.y*h;ctx.fillStyle='rgba(255,255,255,.96)';ctx.font=`650 ${Math.round(31*detailsScale)}px system-ui`;const detailLines=wrapWorkoutText(ctx,detail,boxW),lineH=42*detailsScale;detailLines.slice(0,8).forEach((line,i)=>ctx.fillText(line,dx,dy+i*lineH,boxW));workoutStoryBounds.details={x:dx-15,y:dy-40*detailsScale,w:boxW+30,h:Math.max(55,detailLines.length*lineH+20)};
+  const captionScale=sizes.caption/100,cap=(workoutStory.caption.value||'오늘도 해냈다.').trim(),cx=L.caption.x*w,cy=L.caption.y*h;ctx.fillStyle='rgba(255,255,255,.9)';ctx.font=`500 ${Math.round(30*captionScale)}px system-ui`;const capLines=wrapWorkoutText(ctx,cap,boxW);capLines.slice(0,3).forEach((line,i)=>ctx.fillText(line,cx,cy+i*38*captionScale,boxW));workoutStoryBounds.caption={x:cx-15,y:cy-38*captionScale,w:boxW+30,h:Math.max(50,capLines.length*38*captionScale+15)};
+  const watermarkScale=sizes.watermark/100,wx=L.watermark.x*w,wy=L.watermark.y*h;ctx.textAlign='left';ctx.fillStyle='#39ff14';ctx.font=`900 ${Math.round(34*watermarkScale)}px system-ui`;ctx.fillText('ELDYN',wx,wy);ctx.fillStyle='rgba(255,255,255,.82)';ctx.font=`700 ${Math.round(15*watermarkScale)}px system-ui`;ctx.fillText('MOVE FORWARD',wx,wy+24*watermarkScale);workoutStoryBounds.watermark={x:wx-10,y:wy-42*watermarkScale,w:220*watermarkScale,h:75*watermarkScale};ctx.shadowBlur=0
 }
 function workoutStoryPoint(e){const r=workoutStory.canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*workoutStory.canvas.width/r.width,y:(e.clientY-r.top)*workoutStory.canvas.height/r.height}}
-function openWorkoutStory(){const closeBtn=document.getElementById('workoutStoryCloseBtn');if(closeBtn)closeBtn.textContent=state.settings.language==='en'?'Close':'닫기';syncWorkoutStoryDetails(true);workoutStoryPhotoTransform={x:0,y:0,zoom:(+workoutStory.photoSize?.value||100)/100};updateWorkoutStoryLabels();drawWorkoutStory();workoutStory.dialog.showModal()}
+function openWorkoutStory(){const closeBtn=document.getElementById('workoutStoryCloseBtn');if(closeBtn)closeBtn.textContent=state.settings.language==='en'?'Close':'닫기';syncWorkoutStoryDetails(true);workoutStoryPhotoTransform={x:0,y:0,zoom:(+workoutStory.photoSize?.value||100)/100};syncWorkoutStorySizeControls();updateWorkoutStoryLabels();drawWorkoutStory();workoutStory.dialog.showModal()}
 document.getElementById('createWorkoutStoryBtn')?.addEventListener('click',openWorkoutStory);
 workoutStory.photo?.addEventListener('change',()=>{const f=workoutStory.photo.files?.[0];if(!f)return;const img=new Image();img.onload=()=>{workoutStoryImage=img;workoutStoryPhotoTransform={x:0,y:0,zoom:(+workoutStory.photoSize?.value||100)/100};drawWorkoutStory();URL.revokeObjectURL(img.src)};img.src=URL.createObjectURL(f)});
-function updateWorkoutStoryLabels(){if(workoutStory.textSizeValue)workoutStory.textSizeValue.textContent=`${workoutStory.textSize.value}%`;if(workoutStory.widthValue)workoutStory.widthValue.textContent=`${workoutStory.width.value}%`;if(workoutStory.photoSizeValue)workoutStory.photoSizeValue.textContent=`${workoutStory.photoSize.value}%`}
+function updateWorkoutStoryLabels(){if(workoutStory.widthValue)workoutStory.widthValue.textContent=`${workoutStory.width.value}%`;if(workoutStory.photoSizeValue)workoutStory.photoSizeValue.textContent=`${workoutStory.photoSize.value}%`;const sizes=workoutStoryTextSizes();for(const key of Object.keys(defaultWorkoutStoryTextSizes)){if(workoutStory.sizeValues[key])workoutStory.sizeValues[key].textContent=`${sizes[key]}%`}}
 [workoutStory.type,workoutStory.duration,workoutStory.caption,workoutStory.details].forEach(el=>el?.addEventListener('input',drawWorkoutStory));workoutStory.detailMode?.addEventListener('change',()=>{syncWorkoutStoryDetails(true);drawWorkoutStory()});
-[workoutStory.textSize,workoutStory.width].forEach(el=>el?.addEventListener('input',()=>{updateWorkoutStoryLabels();drawWorkoutStory()}));workoutStory.photoSize?.addEventListener('input',()=>{workoutStoryPhotoTransform.zoom=(+workoutStory.photoSize.value||100)/100;updateWorkoutStoryLabels();drawWorkoutStory()});updateWorkoutStoryLabels();
+workoutStory.width?.addEventListener('input',()=>{updateWorkoutStoryLabels();drawWorkoutStory()});
+for(const [key,input] of Object.entries(workoutStory.sizeInputs)){input?.addEventListener('input',()=>{const sizes=workoutStoryTextSizes();sizes[key]=Math.max(55,Math.min(180,+input.value||100));if(workoutStory.sizeValues[key])workoutStory.sizeValues[key].textContent=`${sizes[key]}%`;saveState();drawWorkoutStory()})}
+workoutStory.photoSize?.addEventListener('input',()=>{workoutStoryPhotoTransform.zoom=(+workoutStory.photoSize.value||100)/100;updateWorkoutStoryLabels();drawWorkoutStory()});syncWorkoutStorySizeControls();updateWorkoutStoryLabels();
 workoutStory.canvas?.addEventListener('pointerdown',e=>{const p=workoutStoryPoint(e),target=workoutStory.editTarget?.value||'auto',order=['title','summary','details','caption','watermark'];let key=null;if(target==='auto')key=order.find(k=>pointInBounds(p.x,p.y,workoutStoryBounds[k]));else if(target!=='photo')key=target;if(key&&workoutStoryBounds[key])workoutStoryDrag={type:'element',key,start:p,origin:{...workoutStoryLayout()[key]}};else if(workoutStoryImage&&(target==='photo'||target==='auto')){const r=workoutStory.canvas.getBoundingClientRect();workoutStoryDrag={type:'photo',x:e.clientX,y:e.clientY,startX:workoutStoryPhotoTransform.x,startY:workoutStoryPhotoTransform.y,w:r.width,h:r.height}}else return;workoutStory.canvas.setPointerCapture?.(e.pointerId);workoutStory.canvas.classList.add('dragging');e.preventDefault()});
 workoutStory.canvas?.addEventListener('pointermove',e=>{if(!workoutStoryDrag)return;if(workoutStoryDrag.type==='photo'){const dx=(e.clientX-workoutStoryDrag.x)/Math.max(1,workoutStoryDrag.w),dy=(e.clientY-workoutStoryDrag.y)/Math.max(1,workoutStoryDrag.h);workoutStoryPhotoTransform.x=Math.max(-1,Math.min(1,workoutStoryDrag.startX+dx*2));workoutStoryPhotoTransform.y=Math.max(-1,Math.min(1,workoutStoryDrag.startY+dy*2))}else{const p=workoutStoryPoint(e),dx=(p.x-workoutStoryDrag.start.x)/workoutStory.canvas.width,dy=(p.y-workoutStoryDrag.start.y)/workoutStory.canvas.height;let x=clamp01(workoutStoryDrag.origin.x+dx),y=clamp01(workoutStoryDrag.origin.y+dy);for(const g of [.065,.5,.935]){if(Math.abs(x-g)<.018)x=g;if(Math.abs(y-g)<.018)y=g}state.settings.workoutStoryLayout=state.settings.workoutStoryLayout||{};state.settings.workoutStoryLayout[workoutStoryDrag.key]={x,y}}drawWorkoutStory();e.preventDefault()});
 function stopWorkoutStoryDrag(){if(!workoutStoryDrag)return;workoutStoryDrag=null;workoutStory.canvas.classList.remove('dragging');saveState()}
 workoutStory.canvas?.addEventListener('pointerup',stopWorkoutStoryDrag);workoutStory.canvas?.addEventListener('pointercancel',stopWorkoutStoryDrag);
-workoutStory.reset?.addEventListener('click',()=>{state.settings.workoutStoryLayout=JSON.parse(JSON.stringify(defaultWorkoutStoryLayout));workoutStoryPhotoTransform={x:0,y:0,zoom:(+workoutStory.photoSize?.value||100)/100};saveState();drawWorkoutStory()});
+workoutStory.reset?.addEventListener('click',()=>{state.settings.workoutStoryLayout=JSON.parse(JSON.stringify(defaultWorkoutStoryLayout));state.settings.workoutStoryTextSizes={...defaultWorkoutStoryTextSizes};workoutStoryPhotoTransform={x:0,y:0,zoom:(+workoutStory.photoSize?.value||100)/100};syncWorkoutStorySizeControls();saveState();drawWorkoutStory()});
 document.getElementById('renderWorkoutStoryBtn')?.addEventListener('click',drawWorkoutStory);
 async function saveWorkoutStoryImage(){
   drawWorkoutStory();const blob=await new Promise(resolve=>workoutStory.canvas.toBlob(resolve,'image/png',.96));if(!blob)return alert(state.settings.language==='ko'?'이미지 생성에 실패했어요.':'Could not create image.');

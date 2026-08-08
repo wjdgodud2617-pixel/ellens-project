@@ -187,3 +187,7 @@ html[data-theme="paris"]{--accent:#f58fa3;--accent-rgb:245,143,163;--accent-soft
 .dashboard-run-item-wrap .dashboard-run-item{width:100%}
 .dashboard-story-btn{white-space:nowrap;min-height:42px}
 @media(max-width:520px){.dashboard-run-item-wrap{grid-template-columns:1fr}.dashboard-story-btn{width:100%}}
+
+/* v1.2.14: Run/Walk story CTA matches Start Run dimensions */
+.run-controls .run-story-open{grid-column:1/-1;width:100%;min-height:54px;padding:17px;border-radius:18px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:800;font-size:1rem}
+.run-controls .run-story-open[hidden]{display:none!important}
