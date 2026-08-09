@@ -494,9 +494,40 @@ function storyLayout(){const saved=state.settings.storyLayout||{};return Object.
 function clamp01(n,min=.03,max=.97){return Math.max(min,Math.min(max,n))}
 function pointInBounds(x,y,b){return b&&x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h}
 function sharePointerPoint(e){const r=shareEls.canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*shareEls.canvas.width/r.width,y:(e.clientY-r.top)*shareEls.canvas.height/r.height}}
-const ACTIVE_RUN_KEY='eldyn-active-run-v4';
-function saveActiveRun(){if(!runSession){localStorage.removeItem(ACTIVE_RUN_KEY);return}const snap={...runSession,savedAt:Date.now()};localStorage.setItem(ACTIVE_RUN_KEY,JSON.stringify(snap))}
-function restoreActiveRun(){try{const r=JSON.parse(localStorage.getItem(ACTIVE_RUN_KEY)||'null');if(!r||Date.now()-(r.savedAt||0)>12*3600e3)return localStorage.removeItem(ACTIVE_RUN_KEY);runSession=r;if(r.status==='running'){runSession.elapsedBefore=(r.elapsedBefore||0)+Math.max(0,Date.now()-(r.segmentStartedAt||Date.now()));runSession.segmentStartedAt=Date.now();runSession.lastPoint=null;runSession.status='paused';runSession.autoPaused=false}runEls.gpsToggle.checked=!!runSession.gpsEnabled;runEls.autoPause.checked=runSession.autoPauseEnabled!==false;runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000)}catch{localStorage.removeItem(ACTIVE_RUN_KEY)}}
+const ACTIVE_RUN_KEY='eldyn-active-run-v5',LEGACY_ACTIVE_RUN_KEY='eldyn-active-run-v4';
+function saveActiveRun(reason='tick'){
+  if(!runSession){localStorage.removeItem(ACTIVE_RUN_KEY);localStorage.removeItem(LEGACY_ACTIVE_RUN_KEY);return}
+  const now=Date.now();runSession.lastPersistedAt=now;runSession.lastPersistReason=reason;
+  const snap={...runSession,savedAt:now};
+  localStorage.setItem(ACTIVE_RUN_KEY,JSON.stringify(snap));
+}
+function restoreActiveRun(){
+  try{
+    const raw=localStorage.getItem(ACTIVE_RUN_KEY)||localStorage.getItem(LEGACY_ACTIVE_RUN_KEY);
+    const r=JSON.parse(raw||'null'),now=Date.now();
+    if(!r||now-(r.savedAt||0)>12*3600e3){localStorage.removeItem(ACTIVE_RUN_KEY);localStorage.removeItem(LEGACY_ACTIVE_RUN_KEY);return}
+    runSession={...r,speedSamples:Array.isArray(r.speedSamples)?r.speedSamples:[],splits:Array.isArray(r.splits)?r.splits:[],route:Array.isArray(r.route)?r.route:[]};
+    if(r.status==='running'){
+      const anchor=r.distancePoint||r.lastPoint||r.backgroundAnchor;
+      if(anchor)runSession.backgroundAnchor={...anchor};
+      runSession.backgroundedAt=Number(r.backgroundedAt)||Number(r.lastGpsAt)||Number(r.savedAt)||now;
+      runSession.pendingResumeBridge=!!anchor;
+      runSession.elapsedBefore=(r.elapsedBefore||0)+Math.max(0,now-(r.segmentStartedAt||r.savedAt||now));
+      runSession.segmentStartedAt=now;
+      runSession.movingMs=Number(r.movingMs)||0;
+      runSession.movingSegmentAt=null;
+      runSession.awaitingResumeFix=!!runSession.gpsEnabled;
+      runSession.autoPaused=false;
+      runSession.resumeCount=(Number(r.resumeCount)||0)+1;
+      runSession.restoredAt=now;
+    }
+    if(runEls.gpsToggle)runEls.gpsToggle.checked=!!runSession.gpsEnabled;
+    if(runEls.autoPause)runEls.autoPause.checked=runSession.autoPauseEnabled!==false;
+    clearInterval(runTimer);runTimer=setInterval(()=>{renderRun();saveActiveRun('timer')},1000);
+    renderRun();
+    if(runSession.status==='running')setTimeout(()=>resumeRunTracking('restore'),80);
+  }catch(err){console.warn('Active run restore failed',err);localStorage.removeItem(ACTIVE_RUN_KEY);localStorage.removeItem(LEGACY_ACTIVE_RUN_KEY)}
+}
 function gpsQualityLabel(acc){if(!Number.isFinite(acc))return 'WAITING';if(acc<=10)return 'EXCELLENT';if(acc<=25)return 'GOOD';if(acc<=50)return 'FAIR';return 'LOW'}
 let liveRunMap=null,liveRunPath=null,liveRunMarker=null,liveRunStartMarker=null,liveMapHasFit=false;
 function ensureLiveRunMap(){
@@ -615,16 +646,42 @@ function updateRunDocumentTitle(){
 }
 function startGps(){if(!runSession?.gpsEnabled)return;if(!navigator.geolocation){return gpsError({message:'This browser does not support GPS.'})}stopGps();runWatchId=navigator.geolocation.watchPosition(onGps,gpsError,{enableHighAccuracy:true,maximumAge:0,timeout:15000})}
 function stopGps(){if(runWatchId!==null)navigator.geolocation.clearWatch(runWatchId);runWatchId=null}
-function prepareRunForBackground(){
-  if(!runSession||runSession.status!=='running'||!runSession.gpsEnabled)return;
-  const anchor=runSession.distancePoint||runSession.lastPoint;
-  if(anchor)runSession.backgroundAnchor={...anchor};
-  runSession.backgroundedAt=Date.now();
-  runSession.pendingResumeBridge=true;
-  // iOS can suspend a PWA when the screen locks or another app opens. Clearing the
-  // watcher makes the foreground resume deterministic instead of leaving a dead ID.
-  stopGps();
-  saveActiveRun();
+function prepareRunForBackground(reason='hidden'){
+  if(!runSession||runSession.status!=='running')return;
+  const now=Date.now();
+  runSession.lastVisibleAt=now;runSession.interruptionReason=reason;
+  if(runSession.gpsEnabled){
+    if(!runSession.pendingResumeBridge){
+      const anchor=runSession.distancePoint||runSession.lastPoint;
+      if(anchor)runSession.backgroundAnchor={...anchor};
+      runSession.backgroundedAt=now;
+      runSession.pendingResumeBridge=!!anchor;
+    }
+    if(runSession.movingSegmentAt&&!runSession.autoPaused){
+      runSession.movingMs=(runSession.movingMs||0)+Math.max(0,now-runSession.movingSegmentAt);
+      runSession.movingSegmentAt=null;
+    }
+    runSession.awaitingResumeFix=true;
+    // iOS may leave a stale watchPosition id after app switching. Always rebuild it
+    // when ELDYN becomes active again.
+    stopGps();
+  }
+  saveActiveRun(`background:${reason}`);
+}
+function resumeRunTracking(reason='visible'){
+  if(!runSession||runSession.status!=='running')return;
+  const now=Date.now();if(now-(runSession.lastResumeKickAt||0)<500)return;runSession.lastResumeKickAt=now;runSession.lastResumeReason=reason;runSession.lastResumedAt=now;
+  if(runSession.gpsEnabled){
+    const anchor=runSession.distancePoint||runSession.lastPoint||runSession.backgroundAnchor;
+    const lastSignal=Number(runSession.lastGpsAt)||Number(anchor?.t)||Number(runSession.lastPersistedAt)||now;
+    if(!runSession.pendingResumeBridge&&anchor&&now-lastSignal>5000){
+      runSession.backgroundAnchor={...anchor};runSession.backgroundedAt=lastSignal;runSession.pendingResumeBridge=true;
+      runSession.awaitingResumeFix=true;
+    }
+    startGps();
+  }else if(!runSession.movingSegmentAt){runSession.movingSegmentAt=now}
+  if(document.visibilityState==='visible')requestWakeLock();
+  saveActiveRun(`resume:${reason}`);renderRun();renderRunMode();
 }
 function recoverBackgroundGap(p){
   if(!runSession?.pendingResumeBridge)return false;
@@ -642,6 +699,9 @@ function recoverBackgroundGap(p){
   // Cap recovery to 30 minutes to avoid adding a stale jump after a long absence.
   if(gapSec<=1800&&delta>=1&&delta/gapSec<=maxSpeed){
     runSession.distanceM+=delta;
+    runSession.backgroundRecoveredM=(runSession.backgroundRecoveredM||0)+delta;
+    runSession.backgroundRecoveryCount=(runSession.backgroundRecoveryCount||0)+1;
+    runSession.movingMs=(runSession.movingMs||0)+Math.max(0,p.t-hiddenAt);
     runSession.route.push({lat:p.lat,lon:p.lon,accuracy:p.accuracy,t:p.t,resumed:true});
     const completed=Math.floor(runSession.distanceM/1000);
     while(runSession.splits.length<completed){
@@ -649,13 +709,16 @@ function recoverBackgroundGap(p){
       runSession.splits.push({km:runSession.splits.length+1,seconds:Math.max(1,totalSec-previous)});
     }
   }
-  runSession.lastPoint=p;runSession.distancePoint=p;runSession.speedSamples=[];runSession.currentPace=Infinity;
+  runSession.lastPoint=p;runSession.distancePoint=p;runSession.lastGpsAt=p.t;runSession.speedSamples=[];runSession.currentPace=Infinity;
+  runSession.awaitingResumeFix=false;if(!runSession.autoPaused)runSession.movingSegmentAt=Date.now();
+  saveActiveRun('resume-fix');
   return true;
 }
 function onGps(pos){
   if(!runSession||runSession.status!=='running'||!runSession.gpsEnabled)return;
   const c=pos.coords,p={lat:c.latitude,lon:c.longitude,t:pos.timestamp||Date.now(),accuracy:Number(c.accuracy)||999};
-  runSession.accuracy=p.accuracy;runSession.hasFix=true;
+  runSession.accuracy=p.accuracy;runSession.hasFix=true;runSession.lastGpsAt=p.t;
+  if(runSession.awaitingResumeFix&&!runSession.pendingResumeBridge){runSession.awaitingResumeFix=false;if(!runSession.autoPaused&&!runSession.movingSegmentAt)runSession.movingSegmentAt=Date.now()}
   // Poor fixes create large jumps. Keep the UI status, but do not use them for distance.
   if(p.accuracy>50){renderRun();return}
   if(recoverBackgroundGap(p)){saveActiveRun();renderRun();return}
@@ -718,10 +781,21 @@ function onGps(pos){
   runSession.lastPoint=p;saveActiveRun();renderRun()
 }
 function gpsError(err){runEls.gps.textContent=err?.code===1?'Location denied':'GPS unavailable';runEls.gps.className='gps-badge error';runEls.note.textContent=err?.code===1?'Allow location access or finish and restart with GPS switched off.':'Move outdoors, or restart with GPS switched off.'}
+let lastGpsWatchdogRestart=0;
+function ensureGpsFresh(){
+  if(!runSession||runSession.status!=='running'||!runSession.gpsEnabled||document.visibilityState!=='visible')return;
+  const now=Date.now(),last=Number(runSession.lastGpsAt)||0,age=last?now-last:now-(new Date(runSession.startedAt).getTime()||now);
+  if(age<15000||now-lastGpsWatchdogRestart<12000)return;
+  const anchor=runSession.distancePoint||runSession.lastPoint;
+  if(anchor&&!runSession.pendingResumeBridge){
+    runSession.backgroundAnchor={...anchor};runSession.backgroundedAt=last||Number(anchor.t)||now;runSession.pendingResumeBridge=true;runSession.awaitingResumeFix=true;
+  }
+  lastGpsWatchdogRestart=now;startGps();saveActiveRun('gps-watchdog');renderRun();
+}
 function beginRun(){
   const gpsEnabled=runEls.gpsToggle.checked;
   if(gpsEnabled&&!window.isSecureContext)return alert('GPS requires HTTPS. Open the Vercel URL, or switch GPS off.');
-  runSession={status:'running',activityType:runEls.activityType?.value||'run',gpsEnabled,autoPauseEnabled:runEls.autoPause.checked,autoPaused:false,startedAt:new Date().toISOString(),segmentStartedAt:Date.now(),elapsedBefore:0,movingMs:0,movingSegmentAt:Date.now(),distanceM:0,lastPoint:null,distancePoint:null,currentPace:Infinity,topSpeedMps:0,accuracy:null,hasFix:false,speedSamples:[],splits:[],route:[]};saveActiveRun();
+  runSession={sessionId:crypto.randomUUID(),status:'running',activityType:runEls.activityType?.value||'run',gpsEnabled,autoPauseEnabled:runEls.autoPause.checked,autoPaused:false,startedAt:new Date().toISOString(),segmentStartedAt:Date.now(),elapsedBefore:0,movingMs:0,movingSegmentAt:Date.now(),distanceM:0,lastPoint:null,distancePoint:null,currentPace:Infinity,topSpeedMps:0,accuracy:null,hasFix:false,lastGpsAt:null,resumeCount:0,backgroundRecoveredM:0,backgroundRecoveryCount:0,speedSamples:[],splits:[],route:[]};saveActiveRun('start');
   if(gpsEnabled)startGps();requestWakeLock();requestRunNoticePermission().then(ok=>{if(ok)showRunCompanionNotification(true)});runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000);renderRun();setTimeout(()=>enterRunMode(),120)
 }
 function togglePause(){
@@ -864,17 +938,22 @@ runModeEls.pause?.addEventListener('click',()=>{togglePause();renderRunMode()});
 runModeEls.unlock?.addEventListener('pointerdown',()=>{clearTimeout(runModeUnlockTimer);runModeUnlockTimer=setTimeout(()=>setRunModeLocked(false),2000)});['pointerup','pointercancel','pointerleave'].forEach(ev=>runModeEls.unlock?.addEventListener(ev,()=>clearTimeout(runModeUnlockTimer)));
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){
-    if(runSession?.status==='running'){requestWakeLock();if(runSession.gpsEnabled)startGps();renderRunMode()}
+    if(runSession?.status==='running')resumeRunTracking('visibility');
     clearRunCompanionNotification();
   }else{
     releaseWakeLock();
-    if(runSession?.status==='running'){prepareRunForBackground();showRunCompanionNotification(true)}
+    if(runSession?.status==='running'){prepareRunForBackground('visibility');showRunCompanionNotification(true)}
   }
-  saveActiveRun();
+  saveActiveRun('visibility');
 });
-window.addEventListener('pagehide',()=>{if(runSession?.status==='running')prepareRunForBackground();saveActiveRun();if(runSession?.status==='running')showRunCompanionNotification(true)});
-window.addEventListener('beforeunload',saveActiveRun);
-setInterval(()=>{if(runSession){saveActiveRun();if(document.visibilityState==='hidden')showRunCompanionNotification()}},30000);restoreActiveRun();
+window.addEventListener('pagehide',()=>{if(runSession?.status==='running')prepareRunForBackground('pagehide');saveActiveRun('pagehide');if(runSession?.status==='running')showRunCompanionNotification(true)});
+window.addEventListener('pageshow',()=>{if(runSession?.status==='running')resumeRunTracking('pageshow')});
+window.addEventListener('focus',()=>{if(runSession?.status==='running')resumeRunTracking('focus')});
+document.addEventListener('freeze',()=>{if(runSession?.status==='running')prepareRunForBackground('freeze');saveActiveRun('freeze')});
+document.addEventListener('resume',()=>{if(runSession?.status==='running')resumeRunTracking('resume')});
+window.addEventListener('beforeunload',()=>saveActiveRun('beforeunload'));
+setInterval(()=>{if(runSession){saveActiveRun('checkpoint');if(document.visibilityState==='hidden')showRunCompanionNotification()}},15000);
+setInterval(ensureGpsFresh,5000);restoreActiveRun();
 
 const workoutStory={
   dialog:document.getElementById('workoutStoryDialog'),canvas:document.getElementById('workoutStoryCanvas'),photo:document.getElementById('workoutStoryPhoto'),type:document.getElementById('workoutStoryType'),duration:document.getElementById('workoutStoryDuration'),caption:document.getElementById('workoutStoryCaption'),details:document.getElementById('workoutStoryDetails'),editTarget:document.getElementById('workoutStoryEditTarget'),width:document.getElementById('workoutStoryWidth'),photoSize:document.getElementById('workoutStoryPhotoSize'),detailMode:document.getElementById('workoutStoryDetailMode'),widthValue:document.getElementById('workoutStoryWidthValue'),photoSizeValue:document.getElementById('workoutStoryPhotoSizeValue'),reset:document.getElementById('resetWorkoutStoryLayoutBtn'),
