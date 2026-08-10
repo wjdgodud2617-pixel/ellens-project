@@ -191,3 +191,6 @@ html[data-theme="paris"]{--accent:#f58fa3;--accent-rgb:245,143,163;--accent-soft
 /* v1.2.14: Run/Walk story CTA matches Start Run dimensions */
 .run-controls .run-story-open{grid-column:1/-1;width:100%;min-height:54px;padding:17px;border-radius:18px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:800;font-size:1rem}
 .run-controls .run-story-open[hidden]{display:none!important}
+
+/* v1.2.20 reliable story editor controls */
+.story-position-control input:disabled{opacity:.35}.story-position-control:has(input:disabled){opacity:.6}.story-drag-hint{line-height:1.45}

@@ -486,7 +486,7 @@ function renderRunMode(){if(!runModeEls.overlay)return;const r=runSession,d=r?r.
 const shareEls={
   dialog:document.getElementById('shareRunDialog'),photo:document.getElementById('sharePhotoInput'),ratio:document.getElementById('shareRatioSelect'),style:document.getElementById('shareStyleSelect'),
   caption:document.getElementById('shareCaptionInput'),canvas:document.getElementById('shareCanvas'),render:document.getElementById('renderShareBtn'),
-  download:document.getElementById('downloadShareBtn'),nativeShare:document.getElementById('nativeShareBtn'),routeSize:document.getElementById('shareRouteSize'),logoSize:document.getElementById('shareLogoSize'),photoSize:document.getElementById('sharePhotoSize'),editTarget:document.getElementById('shareEditTarget'),routeSizeValue:document.getElementById('shareRouteSizeValue'),logoSizeValue:document.getElementById('shareLogoSizeValue'),photoSizeValue:document.getElementById('sharePhotoSizeValue'),resetLayout:document.getElementById('resetStoryLayoutBtn'),saveLayout:document.getElementById('saveStoryLayoutBtn'),
+  download:document.getElementById('downloadShareBtn'),nativeShare:document.getElementById('nativeShareBtn'),routeSize:document.getElementById('shareRouteSize'),logoSize:document.getElementById('shareLogoSize'),photoSize:document.getElementById('sharePhotoSize'),editTarget:document.getElementById('shareEditTarget'),routeSizeValue:document.getElementById('shareRouteSizeValue'),logoSizeValue:document.getElementById('shareLogoSizeValue'),photoSizeValue:document.getElementById('sharePhotoSizeValue'),positionX:document.getElementById('sharePositionX'),positionY:document.getElementById('sharePositionY'),positionXValue:document.getElementById('sharePositionXValue'),positionYValue:document.getElementById('sharePositionYValue'),resetLayout:document.getElementById('resetStoryLayoutBtn'),saveLayout:document.getElementById('saveStoryLayoutBtn'),
   metricSizes:{
     distance:document.getElementById('shareDistanceSize'),pace:document.getElementById('sharePaceSize'),time:document.getElementById('shareTimeSize'),caption:document.getElementById('shareCaptionSize')
   },
@@ -909,7 +909,7 @@ function openShareCard(id){
   sharePhotoImage=null;sharePhotoTransform={x:0,y:0,zoom:1};
   if(shareEls.photoSize)shareEls.photoSize.value='100';
   if(shareEls.photo)shareEls.photo.value='';
-  syncStoryMetricSliders();updateStoryRangeLabels();const closeBtn=document.getElementById('shareCloseBtn');if(closeBtn)closeBtn.textContent=state.settings.language==='en'?'Close':'닫기';renderShareCard();
+  syncStoryMetricSliders();updateStoryRangeLabels();syncStoryPositionControls();const closeBtn=document.getElementById('shareCloseBtn');if(closeBtn)closeBtn.textContent=state.settings.language==='en'?'Close':'닫기';renderShareCard();
   try{
     if(typeof shareEls.dialog.showModal==='function'){
       if(!shareEls.dialog.open)shareEls.dialog.showModal();
@@ -942,12 +942,18 @@ function updateStoryRangeLabels(){
   if(shareEls.logoSizeValue)shareEls.logoSizeValue.textContent=`${shareEls.logoSize.value}%`;
   if(shareEls.photoSizeValue)shareEls.photoSizeValue.textContent=`${shareEls.photoSize.value}%`;
 }
-storyMetricKeys.forEach(k=>shareEls.metricSizes?.[k]?.addEventListener('input',()=>{
-  const input=shareEls.metricSizes[k];
-  state.settings.storyLayout=state.settings.storyLayout||{};
-  state.settings.storyLayout[k]={...storyLayout()[k],scale:(+input.value||88)/100};
-  updateStoryRangeLabels();renderShareCard();
-}));
+storyMetricKeys.forEach(k=>{
+  const input=shareEls.metricSizes?.[k];
+  if(!input)return;
+  const applyMetricSize=()=>{
+    state.settings.storyLayout=state.settings.storyLayout||{};
+    const current=storyLayout()[k];
+    state.settings.storyLayout[k]={...current,scale:Math.max(.5,Math.min(1.8,(+input.value||88)/100))};
+    setStoryMoveTarget(k);updateStoryRangeLabels();queueStoryRender();
+  };
+  input.addEventListener('input',applyMetricSize,{passive:true});
+  input.addEventListener('change',()=>{applyMetricSize();saveState()});
+});
 [shareEls.routeSize,shareEls.logoSize].forEach(el=>el?.addEventListener('input',()=>{updateStoryRangeLabels();renderShareCard()}));
 shareEls.photoSize?.addEventListener('input',()=>{sharePhotoTransform.zoom=(+shareEls.photoSize.value||100)/100;updateStoryRangeLabels();renderShareCard()});
 updateStoryRangeLabels();shareEls.render?.addEventListener('click',()=>renderShareCard());
@@ -960,18 +966,59 @@ function storyHitAt(x,y){
   const order=['caption','time','pace','distance','logo','route'];
   return order.find(k=>pointInBounds(x,y,expandedStoryBounds(shareBounds[k],k)))||null;
 }
-function setStoryMoveTarget(key){if(shareEls.editTarget&&key)shareEls.editTarget.value=key}
+const storyMovableKeys=['distance','pace','time','caption','route','logo'];
+function syncStoryPositionControls(){
+  const key=shareEls.editTarget?.value;
+  const enabled=storyMovableKeys.includes(key);
+  const pos=enabled?storyLayout()[key]:null;
+  [shareEls.positionX,shareEls.positionY].forEach(el=>{if(el)el.disabled=!enabled});
+  if(enabled&&pos){
+    if(shareEls.positionX)shareEls.positionX.value=Math.round(clamp01(pos.x)*100);
+    if(shareEls.positionY)shareEls.positionY.value=Math.round(clamp01(pos.y)*100);
+    if(shareEls.positionXValue)shareEls.positionXValue.textContent=`${Math.round(clamp01(pos.x)*100)}%`;
+    if(shareEls.positionYValue)shareEls.positionYValue.textContent=`${Math.round(clamp01(pos.y)*100)}%`;
+  }else{
+    if(shareEls.positionXValue)shareEls.positionXValue.textContent='--';
+    if(shareEls.positionYValue)shareEls.positionYValue.textContent='--';
+  }
+}
+function setStoryMoveTarget(key){
+  if(shareEls.editTarget&&key)shareEls.editTarget.value=key;
+  syncStoryPositionControls();
+}
+function applyStoryPositionFromControls(save=false){
+  const key=shareEls.editTarget?.value;
+  if(!storyMovableKeys.includes(key))return;
+  state.settings.storyLayout=state.settings.storyLayout||{};
+  const current=storyLayout()[key];
+  state.settings.storyLayout[key]={...current,x:clamp01((+shareEls.positionX?.value||50)/100),y:clamp01((+shareEls.positionY?.value||50)/100)};
+  syncStoryPositionControls();queueStoryRender();if(save)saveState();
+}
+shareEls.editTarget?.addEventListener('change',syncStoryPositionControls);
+shareEls.positionX?.addEventListener('input',()=>applyStoryPositionFromControls(false),{passive:true});
+shareEls.positionY?.addEventListener('input',()=>applyStoryPositionFromControls(false),{passive:true});
+shareEls.positionX?.addEventListener('change',()=>applyStoryPositionFromControls(true));
+shareEls.positionY?.addEventListener('change',()=>applyStoryPositionFromControls(true));
+let storyRenderRaf=0;
+function queueStoryRender(){
+  if(storyRenderRaf)return;
+  storyRenderRaf=requestAnimationFrame(()=>{storyRenderRaf=0;renderShareCard()});
+}
 function beginStoryPointerDrag(e){
   if(e.pointerType==='mouse'&&e.button!==0)return;
   const p=sharePointerPoint(e),target=shareEls.editTarget?.value||'auto';
-  let key=target==='auto'?storyHitAt(p.x,p.y):(target!=='photo'?target:null);
+  // Directly touching a visible item always wins over the dropdown selection.
+  // This makes iPhone editing behave like the workout story editor: tap what you want to move.
+  const hitKey=storyHitAt(p.x,p.y);
+  let key=hitKey || ((target!=='auto'&&target!=='photo')?target:null);
   if(key&&shareBounds[key]){
     setStoryMoveTarget(key);
     shareDrag={type:'element',key,start:p,origin:{...storyLayout()[key]},pointerId:e.pointerId};
-  }else if(sharePhotoImage&&(target==='photo'||target==='auto')){
+  }else if(sharePhotoImage&&(target==='photo'||target==='auto'||!key)){
     shareDrag={type:'photo',x:e.clientX,y:e.clientY,startX:sharePhotoTransform.x,startY:sharePhotoTransform.y,w:shareEls.canvas.getBoundingClientRect().width,h:shareEls.canvas.getBoundingClientRect().height,pointerId:e.pointerId};
   }else return;
-  shareEls.canvas.classList.add('dragging');e.preventDefault();
+  try{shareEls.canvas.setPointerCapture?.(e.pointerId)}catch{}
+  shareEls.canvas.classList.add('dragging');e.preventDefault();e.stopPropagation();
 }
 function moveStoryPointerDrag(e){
   if(!shareDrag||(shareDrag.pointerId!=null&&e.pointerId!==shareDrag.pointerId))return;
@@ -983,19 +1030,25 @@ function moveStoryPointerDrag(e){
     let x=clamp01(shareDrag.origin.x+dx),y=clamp01(shareDrag.origin.y+dy);
     for(const g of [.075,.5,.925]){if(Math.abs(x-g)<.018)x=g;if(Math.abs(y-g)<.018)y=g}
     state.settings.storyLayout=state.settings.storyLayout||{};
-    state.settings.storyLayout[shareDrag.key]={...storyLayout()[shareDrag.key],x,y};
+    const current=storyLayout()[shareDrag.key];
+    state.settings.storyLayout[shareDrag.key]={...current,x,y};syncStoryPositionControls();
   }
-  renderShareCard();e.preventDefault();
+  queueStoryRender();e.preventDefault();e.stopPropagation();
 }
 function stopShareDrag(e){
   if(!shareDrag||(e?.pointerId!=null&&shareDrag.pointerId!=null&&e.pointerId!==shareDrag.pointerId))return;
-  shareDrag=null;shareEls.canvas.classList.remove('dragging');saveState();
+  try{if(e?.pointerId!=null)shareEls.canvas.releasePointerCapture?.(e.pointerId)}catch{}
+  shareDrag=null;shareEls.canvas.classList.remove('dragging');saveState();queueStoryRender();
 }
 shareEls.canvas?.addEventListener('pointerdown',beginStoryPointerDrag,{passive:false});
+shareEls.canvas?.addEventListener('pointermove',moveStoryPointerDrag,{passive:false});
+shareEls.canvas?.addEventListener('pointerup',stopShareDrag,{passive:false});
+shareEls.canvas?.addEventListener('pointercancel',stopShareDrag,{passive:false});
+// Fallback for iOS versions that occasionally lose canvas capture during a fast drag.
 window.addEventListener('pointermove',moveStoryPointerDrag,{passive:false});
 window.addEventListener('pointerup',stopShareDrag,{passive:false});
 window.addEventListener('pointercancel',stopShareDrag,{passive:false});
-shareEls.resetLayout?.addEventListener('click',()=>{state.settings.storyLayout=JSON.parse(JSON.stringify(defaultStoryLayout));sharePhotoTransform={x:0,y:0,zoom:(+shareEls.photoSize?.value||100)/100};syncStoryMetricSliders();saveState();renderShareCard()});
+shareEls.resetLayout?.addEventListener('click',()=>{state.settings.storyLayout=JSON.parse(JSON.stringify(defaultStoryLayout));sharePhotoTransform={x:0,y:0,zoom:(+shareEls.photoSize?.value||100)/100};syncStoryMetricSliders();syncStoryPositionControls();saveState();renderShareCard()});
 shareEls.saveLayout?.addEventListener('click',()=>{saveState();alert(state.settings.language==='en'?'Layout saved.':'현재 배치를 저장했어요.')});
 function canvasBlob(){return new Promise(resolve=>shareEls.canvas.toBlob(resolve,'image/png',.95))}
 shareEls.download?.addEventListener('click',async()=>{const blob=await canvasBlob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
