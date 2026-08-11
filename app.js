@@ -211,7 +211,7 @@ function renderDashboardRunCard(){
     el.querySelectorAll('[data-open-run-story]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openShareCard(btn.dataset.openRunStory)}));
   }
   const allBtn=document.getElementById('dashboardViewRunsBtn');
-  if(allBtn)allBtn.onclick=()=>{switchView('progress');document.getElementById('runHistoryArchive')?.scrollIntoView({behavior:'smooth',block:'start'})};
+  if(allBtn)allBtn.onclick=()=>{switchView('progress');document.getElementById('runTrendSection')?.scrollIntoView({behavior:'smooth',block:'start'})};
 };
 
 
@@ -290,7 +290,32 @@ function showCelebration(s){const m=mood(s);celebrationContent.innerHTML=`<div c
 function confetti(){for(let i=0;i<28;i++){const el=document.createElement('i');el.className='confetti';el.style.left=Math.random()*100+'vw';el.style.setProperty('--x',(Math.random()*180-90)+'px');el.style.animationDelay=Math.random()*.5+'s';document.body.appendChild(el);setTimeout(()=>el.remove(),2400)}}
 function renderCalendar(){const y=calendarCursor.getFullYear(),m=calendarCursor.getMonth();monthTitle.textContent=new Intl.DateTimeFormat('en',{month:'long',year:'numeric'}).format(calendarCursor);const first=new Date(y,m,1),days=new Date(y,m+1,0).getDate();let html='';for(let i=0;i<first.getDay();i++)html+='<div class="day blank"></div>';for(let d=1;d<=days;d++){const key=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,s=state.logs[key]?scoreFor(state.logs[key]):0;html+=`<button class="day ${key===todayKey()?'today':''} ${key===selectedDate?'selected':''}" data-date="${key}"><span>${d}</span><span>${s===100?'🤖':s===0?'':'•'}</span><span class="heat"><i style="width:${s}%"></i></span></button>`}calendarGrid.innerHTML=html;renderDaySummary()}
 function renderDaySummary(){const log=state.logs[selectedDate],s=log?scoreFor(log):0,m=mood(s),routine=weeklyPlan[dateFromKey(selectedDate).getDay()];daySummary.innerHTML=`<p class="eyebrow">${selectedDate}</p><h2>${escapeHtml(localizeWorkoutName(log?.planName||routine.name))}</h2><p class="muted">${m.emoji} ${s}% complete · ${log?.exercises?.length??routine.exercises.length} exercises</p>${log?`<p>Water ${log.water||0} ml · Sleep ${log.sleep||0} h · Protein ${log.protein||0} g</p>`:'<p>The weekly plan will be created when you open this day.</p>'}<button class="primary-btn" id="openSelectedDay">Open this workout</button>`;document.getElementById('openSelectedDay').onclick=()=>{activeDate=selectedDate;switchView('today');renderToday()}}
-function renderProgress(){const keys=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return keyFromDate(d)});weeklyBars.innerHTML=keys.map(k=>{const s=state.logs[k]?scoreFor(state.logs[k]):0;return`<div class="bar-col"><div class="bar" style="height:${Math.max(s,2)}%"></div><small>${k.slice(8)}</small></div>`}).join('')}
+let bodyTrendDays=7,runTrendDays=7,runTrendMetric='distance';
+function trendDateLabel(value){const d=new Date(value);return `${d.getMonth()+1}/${d.getDate()}`}
+function trendSvg(rows,{valueKey,formatValue,paceMode=false}){
+  if(!rows.length)return `<div class="trend-empty">${state.settings.language==='ko'?'표시할 기록이 아직 없어요.':'No records to chart yet.'}</div>`;
+  const W=720,H=230,pad={l:42,r:18,t:28,b:38},vals=rows.map(x=>+x[valueKey]).filter(Number.isFinite);if(!vals.length)return '';
+  let lo=Math.min(...vals),hi=Math.max(...vals);if(lo===hi){lo=Math.max(0,lo-(lo*.08||1));hi=hi+(hi*.08||1)}const gap=(hi-lo)*.14;lo=Math.max(0,lo-gap);hi+=gap;
+  const x=i=>rows.length===1?(pad.l+(W-pad.l-pad.r)/2):pad.l+i*(W-pad.l-pad.r)/(rows.length-1),y=v=>pad.t+(hi-v)*(H-pad.t-pad.b)/(hi-lo||1);
+  const ticks=[0,.5,1].map(t=>lo+(hi-lo)*t);let out=`<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  ticks.forEach(v=>{const yy=y(v);out+=`<line class="trend-grid" x1="${pad.l}" x2="${W-pad.r}" y1="${yy}" y2="${yy}"/><text class="trend-axis-label" x="${pad.l-7}" y="${yy+4}" text-anchor="end">${formatValue(v,true)}</text>`});
+  if(rows.length>1)out+=`<polyline class="trend-line" points="${rows.map((r,i)=>`${x(i)},${y(+r[valueKey])}`).join(' ')}"/>`;
+  rows.forEach((r,i)=>{const xx=x(i),yy=y(+r[valueKey]);out+=`<circle class="trend-dot" cx="${xx}" cy="${yy}" r="5"/><text class="trend-value" x="${xx}" y="${Math.max(14,yy-11)}" text-anchor="middle">${formatValue(+r[valueKey],false)}</text>`;if(rows.length<=8||i===0||i===rows.length-1||i%Math.ceil(rows.length/6)===0)out+=`<text class="trend-axis-label" x="${xx}" y="${H-12}" text-anchor="middle">${trendDateLabel(r.date)}</text>`});
+  return out+'</svg>';
+}
+function periodRows(rows,days){if(!days)return rows;const cutoff=Date.now()-(days-1)*86400000;return rows.filter(x=>new Date(x.date).getTime()>=cutoff)}
+function renderTrendControls(){
+  document.querySelectorAll('#bodyTrendPeriod button').forEach(b=>b.classList.toggle('active',+b.dataset.days===bodyTrendDays));
+  document.querySelectorAll('#runTrendPeriod button').forEach(b=>b.classList.toggle('active',+b.dataset.days===runTrendDays));
+  document.querySelectorAll('#runTrendMetric button').forEach(b=>b.classList.toggle('active',b.dataset.metric===runTrendMetric));
+}
+function renderBodyTrend(){const el=document.getElementById('bodyTrendChart');if(!el)return;const rows=periodRows((state.body||[]).filter(x=>Number.isFinite(+x.weight)&&+x.weight>0).map(x=>({date:x.date,weight:+x.weight})).sort((a,b)=>new Date(a.date)-new Date(b.date)),bodyTrendDays);el.innerHTML=trendSvg(rows,{valueKey:'weight',formatValue:(v)=>`${v.toFixed(1)}kg`})}
+function renderRunTrend(){const el=document.getElementById('runTrendChart');if(!el)return;const rows=periodRows((state.runs||[]).filter(r=>(r.activityType||'run')==='run'&&r.endedAt&&+r.distanceKm>0).map(r=>({date:r.endedAt,distance:+r.distanceKm,pace:+r.avgPaceSecKm||0,time:(+r.durationMs||0)/60000})).sort((a,b)=>new Date(a.date)-new Date(b.date)),runTrendDays);const cfg=runTrendMetric==='pace'?{valueKey:'pace',formatValue:(v)=>paceText(Math.max(0,Math.round(v)))}:runTrendMetric==='time'?{valueKey:'time',formatValue:(v)=>`${Math.round(v)}m`}:{valueKey:'distance',formatValue:(v)=>`${v.toFixed(2)}km`};el.innerHTML=trendSvg(rows,cfg)}
+function renderProgressRunHistory(){const el=document.getElementById('progressRunHistory');if(!el)return;const lang=state.settings.language||'ko',runs=(state.runs||[]).filter(r=>(r.activityType||'run')==='run').slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));el.innerHTML=runs.length?runs.map(r=>`<div class="progress-run-row"><span><b>${new Date(r.endedAt).toLocaleDateString()}</b><small>${formatClock(r.durationMs)} · ${paceText(r.avgPaceSecKm)}/km</small></span><strong>${formatDistance(r.distanceKm)}</strong></div>`).join(''):`<div class="trend-empty">${lang==='ko'?'아직 러닝 기록이 없어요.':'No running records yet.'}</div>`}
+function renderProgress(){const keys=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return keyFromDate(d)});weeklyBars.innerHTML=keys.map(k=>{const s=state.logs[k]?scoreFor(state.logs[k]):0;return`<div class="bar-col"><div class="bar" style="height:${Math.max(s,2)}%"></div><small>${k.slice(8)}</small></div>`}).join('');renderTrendControls();renderBodyTrend();renderRunTrend();renderProgressRunHistory()}
+document.getElementById('bodyTrendPeriod')?.addEventListener('click',e=>{const b=e.target.closest('button[data-days]');if(!b)return;bodyTrendDays=+b.dataset.days;renderTrendControls();renderBodyTrend()});
+document.getElementById('runTrendPeriod')?.addEventListener('click',e=>{const b=e.target.closest('button[data-days]');if(!b)return;runTrendDays=+b.dataset.days;renderTrendControls();renderRunTrend()});
+document.getElementById('runTrendMetric')?.addEventListener('click',e=>{const b=e.target.closest('button[data-metric]');if(!b)return;runTrendMetric=b.dataset.metric;renderTrendControls();renderRunTrend()});
 const KO_WORKOUT_NAMES={
  'Lower Body Strength':'하체 근력','Upper Body Strength':'상체 근력','Full Body Strength':'전신 근력','Glutes & Core':'둔근·코어','Push Day':'상체 밀기','Pull Day':'상체 당기기',
  'Easy Run':'이지 러닝','Recovery Run':'회복 러닝','Tempo Run':'템포 러닝','Interval Run':'인터벌 러닝','Long Run':'롱 러닝','Hill Run':'언덕 러닝',

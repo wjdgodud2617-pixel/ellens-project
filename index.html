@@ -180,6 +180,31 @@
           <label class="field-card"><span>Muscle mass (kg)</span><input id="muscleInput" type="number" min="0" step="0.1" /></label>
         </div>
         <button id="saveBodyBtn" class="primary-btn">Save today's body record</button>
+
+        <section class="trend-section" id="bodyTrendSection">
+          <div class="section-head trend-head"><div><p class="eyebrow">BODY TREND</p><h2 id="bodyTrendTitle">몸무게 변화</h2></div></div>
+          <div class="trend-period" id="bodyTrendPeriod" role="group" aria-label="Body trend period">
+            <button type="button" data-days="7" class="active">7일</button><button type="button" data-days="30">30일</button><button type="button" data-days="0">전체</button>
+          </div>
+          <div id="bodyTrendChart" class="trend-chart" aria-label="Weight trend chart"></div>
+        </section>
+
+        <section class="trend-section" id="runTrendSection">
+          <div class="section-head trend-head"><div><p class="eyebrow">RUN TREND</p><h2 id="runTrendTitle">러닝 변화</h2></div></div>
+          <div class="trend-tabs" id="runTrendMetric" role="group" aria-label="Run trend metric">
+            <button type="button" data-metric="distance" class="active">거리</button><button type="button" data-metric="pace">평균 페이스</button><button type="button" data-metric="time">시간</button>
+          </div>
+          <div class="trend-period" id="runTrendPeriod" role="group" aria-label="Run trend period">
+            <button type="button" data-days="7" class="active">7일</button><button type="button" data-days="30">30일</button><button type="button" data-days="0">전체</button>
+          </div>
+          <div id="runTrendChart" class="trend-chart" aria-label="Running trend chart"></div>
+        </section>
+
+        <section id="runHistoryArchive" class="trend-section">
+          <div class="section-head"><h2 id="progressRunHistoryTitle">최근 러닝</h2></div>
+          <div id="progressRunHistory" class="progress-run-history"></div>
+        </section>
+
         <div class="section-head"><h2>Last 7 days</h2></div>
         <div id="weeklyBars" class="bars"></div>
       </section>
