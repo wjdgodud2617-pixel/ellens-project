@@ -164,18 +164,21 @@ function rememberFood(id){const list=readFoodList(FOOD_RECENT_KEY).filter(x=>x!=
 function toggleFoodFavorite(id){const list=readFoodList(FOOD_FAVORITE_KEY);writeFoodList(FOOD_FAVORITE_KEY,list.includes(id)?list.filter(x=>x!==id):[id,...list]);renderFoodResults()}
 let editingMealIndex=null,selectedFood=null;
 
-function mealFoodTotals(meal){return (meal.foodItems||[]).reduce((a,x)=>({kcal:a.kcal+(+x.kcal||0),protein:a.protein+(+x.protein||0),carbs:a.carbs+(+x.carbs||0),fat:a.fat+(+x.fat||0)}),{kcal:0,protein:0,carbs:0,fat:0})}
+function mealFoodTotals(meal){return (meal.foodItems||[]).reduce((a,x)=>({kcal:a.kcal+(+x.kcal||+x.calories||0),protein:a.protein+(+x.protein||0),carbs:a.carbs+(+x.carbs||+x.carb||0),fat:a.fat+(+x.fat||0)}),{kcal:0,protein:0,carbs:0,fat:0})}
 function dailyFoodTotals(meals){return meals.reduce((a,m)=>{const t=mealFoodTotals(m);return{kcal:a.kcal+t.kcal,protein:a.protein+t.protein,carbs:a.carbs+t.carbs,fat:a.fat+t.fat}},{kcal:0,protein:0,carbs:0,fat:0})}
 function roundMacro(n){return Math.round((+n||0)*10)/10}
 function nutritionTotalsForLog(log,meals){
-  const detailed=dailyFoodTotals(meals),aggregate={kcal:+log.calories||0,protein:+log.protein||0,carbs:+log.carbs||0,fat:+log.fat||0};
-  // Older/newer log paths can carry only aggregate nutrition. Never make the Daily Nutrition card
-  // look empty just because a meal has not been migrated to foodItems yet.
-  if(detailed.kcal<=0)return aggregate;
-  if(aggregate.kcal>detailed.kcal+1)return aggregate;
-  return detailed;
+  const detailed=dailyFoodTotals(meals);
+  const aggregate={kcal:+log.calories||+log.kcal||0,protein:+log.protein||0,carbs:+log.carbs||+log.carb||0,fat:+log.fat||0};
+  // foodItems are the canonical source once present. Aggregate fields are a legacy fallback only.
+  // This prevents render() from double-counting or silently replacing newly saved meal items.
+  return detailed.kcal>0?detailed:aggregate;
 }
-function syncFoodTotals(log,meals){const t=dailyFoodTotals(meals);if(t.kcal>0){log.calories=Math.round(t.kcal);log.protein=roundMacro(t.protein);log.carbs=roundMacro(t.carbs);log.fat=roundMacro(t.fat)}return nutritionTotalsForLog(log,meals)}
+function syncFoodTotals(log,meals){
+  const t=dailyFoodTotals(meals);
+  if(t.kcal>0){log.calories=Math.round(t.kcal);log.protein=roundMacro(t.protein);log.carbs=roundMacro(t.carbs);log.fat=roundMacro(t.fat)}
+  return t.kcal>0?t:nutritionTotalsForLog(log,meals);
+}
 function ensureFoodDialog(){if(document.getElementById('foodDialog'))return;document.body.insertAdjacentHTML('beforeend',`<dialog id="foodDialog" class="modal food-modal"><button class="close-btn" id="foodDialogClose">×</button><p class="eyebrow">MEAL LOGGER</p><h2 id="foodDialogTitle">음식 검색 및 합계</h2><div class="food-search-row"><input id="foodSearch" placeholder="음식명 검색 (예: 돈까스, 김치, 미역국)"><button class="secondary-btn inline-btn" id="customFoodBtn">직접 영양 입력</button></div><div id="foodResults" class="food-results"></div><div id="foodServingPanel" class="food-serving" hidden><h3 id="selectedFoodName"></h3><div class="form-row"><label>섭취량<input id="foodAmount" type="number" min="0" step="0.1"></label><label>단위<input id="foodUnit" readonly></label></div><p id="foodPreview" class="muted"></p><button class="primary-btn" id="addFoodBtn">이 음식 추가</button></div><div class="section-head"><h2>현재 식사</h2></div><div id="mealFoodList" class="meal-food-list"></div><div id="mealFoodTotal" class="meal-total"></div><button class="primary-btn" id="saveMealFoodsBtn">식단 저장</button></dialog>`);
  foodDialogClose.onclick=()=>foodDialog.close();foodSearch.oninput=renderFoodResults;customFoodBtn.onclick=openCustomFoodPrompt;foodAmount.oninput=renderFoodPreview;addFoodBtn.onclick=addSelectedFood;saveMealFoodsBtn.onclick=saveMealFoods;
 }
@@ -325,9 +328,10 @@ function ensureRunHistoryDialog(){if(document.getElementById('runHistoryDialog')
 function openRunHistoryDialog(){ensureRunHistoryDialog();const lang=state.settings.language||'ko',runs=progressRuns();document.getElementById('runHistoryDialogTitle').textContent=lang==='ko'?'전체 러닝 기록':'Running history';document.getElementById('runHistoryDialogClose').textContent=lang==='ko'?'닫기':'Close';document.getElementById('runHistoryDialogList').innerHTML=runs.length?runs.map(runHistoryRow).join(''):`<div class="trend-empty">${lang==='ko'?'아직 러닝 기록이 없어요.':'No running records yet.'}</div>`;document.getElementById('runHistoryDialog').showModal()}
 function renderProgressRunHistory(){const el=document.getElementById('progressRunHistory');if(!el)return;const lang=state.settings.language||'ko',runs=progressRuns(),recent=runs.slice(0,3);el.innerHTML=(recent.length?recent.map(runHistoryRow).join(''):`<div class="trend-empty">${lang==='ko'?'아직 러닝 기록이 없어요.':'No running records yet.'}</div>`)+(runs.length>3?`<button id="openFullRunHistoryBtn" class="secondary-btn run-history-more" type="button">${lang==='ko'?`전체 러닝 기록 보기 (${runs.length})`:`View all running history (${runs.length})`}</button>`:'');document.getElementById('openFullRunHistoryBtn')?.addEventListener('click',openRunHistoryDialog)}
 function renderProgress(){const keys=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return keyFromDate(d)});weeklyBars.innerHTML=keys.map(k=>{const s=state.logs[k]?scoreFor(state.logs[k]):0;return`<div class="bar-col"><div class="bar" style="height:${Math.max(s,2)}%"></div><small>${k.slice(8)}</small></div>`}).join('');renderTrendControls();renderBodyTrend();renderRunTrend();renderProgressRunHistory()}
-document.getElementById('bodyTrendPeriod')?.addEventListener('click',e=>{const b=e.target.closest('button[data-days]');if(!b)return;bodyTrendDays=+b.dataset.days;renderTrendControls();renderBodyTrend()});
-document.getElementById('runTrendPeriod')?.addEventListener('click',e=>{const b=e.target.closest('button[data-days]');if(!b)return;runTrendDays=+b.dataset.days;renderTrendControls();renderRunTrend()});
-document.getElementById('runTrendMetric')?.addEventListener('click',e=>{const b=e.target.closest('button[data-metric]');if(!b)return;runTrendMetric=b.dataset.metric;renderTrendControls();renderRunTrend()});
+function bindTrendControl(id,selector,onSelect){const group=document.getElementById(id);if(!group)return;group.addEventListener('click',e=>{const b=e.target.closest(selector);if(!b||!group.contains(b))return;e.preventDefault();e.stopPropagation();onSelect(b)})}
+bindTrendControl('bodyTrendPeriod','button[data-days]',b=>{bodyTrendDays=+b.dataset.days;renderTrendControls();renderBodyTrend()});
+bindTrendControl('runTrendPeriod','button[data-days]',b=>{runTrendDays=+b.dataset.days;renderTrendControls();renderRunTrend()});
+bindTrendControl('runTrendMetric','button[data-metric]',b=>{runTrendMetric=b.dataset.metric;renderTrendControls();renderRunTrend()});
 const KO_WORKOUT_NAMES={
  'Lower Body Strength':'하체 근력','Upper Body Strength':'상체 근력','Full Body Strength':'전신 근력','Glutes & Core':'둔근·코어','Push Day':'상체 밀기','Pull Day':'상체 당기기',
  'Easy Run':'이지 러닝','Recovery Run':'회복 러닝','Tempo Run':'템포 러닝','Interval Run':'인터벌 러닝','Long Run':'롱 러닝','Hill Run':'언덕 러닝',
