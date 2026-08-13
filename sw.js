@@ -1,5 +1,5 @@
-const CACHE='eldyn-v1.2.21.6-meal-check-opens-log';
-const RUN_NOTICE_TAG='eldyn-active-run';
+const CACHE='eldyn-v1.2.21.7';
+const RUN_NOTICE_TAG='eldyn-v1.2.21.7';
 const ASSETS=['./','./index.html','./styles.css','./app.js','./config.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([
