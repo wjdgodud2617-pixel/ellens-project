@@ -563,7 +563,7 @@ function restoreActiveRun(){
   }catch(err){console.warn('Active run restore failed',err);localStorage.removeItem(ACTIVE_RUN_KEY);localStorage.removeItem(LEGACY_ACTIVE_RUN_KEY)}
 }
 function gpsQualityLabel(acc){if(!Number.isFinite(acc))return 'WAITING';if(acc<=10)return 'EXCELLENT';if(acc<=25)return 'GOOD';if(acc<=50)return 'FAIR';return 'LOW'}
-let liveRunMap=null,liveRunPath=null,liveRunMarker=null,liveRunStartMarker=null,liveMapHasFit=false;
+let liveRunMap=null,liveRunPath=null,liveRunMarker=null,liveRunStartMarker=null,liveRunSplitMarkers=[],liveMapHasFit=false;
 function ensureLiveRunMap(){
   if(liveRunMap||!runEls.map||!window.L)return;
   liveRunMap=L.map(runEls.map,{zoomControl:true,attributionControl:true}).setView([37.5665,126.9780],13);
@@ -578,6 +578,12 @@ function updateLiveRunMap(){
   if(pts.length){
     if(!liveRunStartMarker)liveRunStartMarker=L.circleMarker(pts[0],{radius:7,color:'#fff',weight:3,fillColor:'#b9ff3f',fillOpacity:1}).addTo(liveRunMap).bindTooltip('S',{permanent:true,direction:'center',className:'run-marker-label'});
     else liveRunStartMarker.setLatLng(pts[0]);
+    liveRunSplitMarkers.forEach(m=>liveRunMap.removeLayer(m));liveRunSplitMarkers=[];
+    (runSession?.splits||[]).forEach(sp=>{
+      if(!Number.isFinite(+sp.lat)||!Number.isFinite(+sp.lon))return;
+      const m=L.circleMarker([+sp.lat,+sp.lon],{radius:8,color:'#fff',weight:2,fillColor:'#071007',fillOpacity:.95}).addTo(liveRunMap).bindTooltip(`${sp.km}K`,{permanent:true,direction:'center',className:'run-marker-label split-km'});
+      liveRunSplitMarkers.push(m);
+    });
     const last=pts[pts.length-1];
     if(!liveRunMarker)liveRunMarker=L.circleMarker(last,{radius:9,color:'#fff',weight:3,fillColor:'#b9ff3f',fillOpacity:1}).addTo(liveRunMap).bindTooltip('●',{permanent:true,direction:'center',className:'run-marker-label current'});
     else liveRunMarker.setLatLng(last);
@@ -586,7 +592,7 @@ function updateLiveRunMap(){
   }else{
     liveMapHasFit=false;
     if(liveRunMarker){liveRunMap.removeLayer(liveRunMarker);liveRunMarker=null}
-    if(liveRunStartMarker){liveRunMap.removeLayer(liveRunStartMarker);liveRunStartMarker=null}
+    if(liveRunStartMarker){liveRunMap.removeLayer(liveRunStartMarker);liveRunStartMarker=null} liveRunSplitMarkers.forEach(m=>liveRunMap.removeLayer(m));liveRunSplitMarkers=[];
   }
 }
 function drawLiveRoute(){updateLiveRunMap()}
@@ -740,7 +746,7 @@ function recoverBackgroundGap(p){
     const completed=Math.floor(runSession.distanceM/1000);
     while(runSession.splits.length<completed){
       const totalSec=movingMs()/1000,previous=runSession.splits.reduce((n,x)=>n+x.seconds,0);
-      runSession.splits.push({km:runSession.splits.length+1,seconds:Math.max(1,totalSec-previous)});
+      runSession.splits.push({km:runSession.splits.length+1,seconds:Math.max(1,totalSec-previous),lat:p.lat,lon:p.lon,t:p.t});
     }
   }
   runSession.lastPoint=p;runSession.distancePoint=p;runSession.lastGpsAt=p.t;runSession.speedSamples=[];runSession.currentPace=Infinity;
@@ -804,7 +810,7 @@ function onGps(pos){
         const completed=Math.floor(runSession.distanceM/1000);
         while(runSession.splits.length<completed){
           const totalSec=movingMs()/1000,previous=runSession.splits.reduce((n,x)=>n+x.seconds,0);
-          runSession.splits.push({km:runSession.splits.length+1,seconds:Math.max(1,totalSec-previous)})
+          runSession.splits.push({km:runSession.splits.length+1,seconds:Math.max(1,totalSec-previous),lat:p.lat,lon:p.lon,t:p.t})
         }
       }
     }
