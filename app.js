@@ -705,6 +705,7 @@ function prepareRunForBackground(reason='hidden'){
       runSession.movingSegmentAt=null;
     }
     runSession.awaitingResumeFix=true;
+    runSession.stillSince=null;runSession.speedSamples=[];
     // iOS may leave a stale watchPosition id after app switching. Always rebuild it
     // when ELDYN becomes active again.
     stopGps();
@@ -753,7 +754,7 @@ function recoverBackgroundGap(p){
     }
   }
   runSession.lastPoint=p;runSession.distancePoint=p;runSession.lastGpsAt=p.t;runSession.speedSamples=[];runSession.currentPace=Infinity;
-  runSession.awaitingResumeFix=false;if(!runSession.autoPaused)runSession.movingSegmentAt=Date.now();
+  runSession.awaitingResumeFix=false;runSession.stillSince=null;runSession.speedSamples=[];if(!runSession.autoPaused)runSession.movingSegmentAt=Date.now();
   saveActiveRun('resume-fix');
   return true;
 }
@@ -947,11 +948,11 @@ async function renderShareCard(){
   const ratio=shareEls.ratio.value,style=shareEls.style?.value||'photo',textScale=(+shareEls.textSize?.value||88)/100,routeScale=(+shareEls.routeSize?.value||80)/100,logoScale=(+shareEls.logoSize?.value||88)/100,showSplits=!!shareEls.showSplits?.checked&&Array.isArray(shareRunRecord?.splits)&&shareRunRecord.splits.length>0,splitScale=(+shareEls.splitsSize?.value||78)/100,sizes={story:[1080,1920],feed:[1080,1350],square:[1080,1080]},[w,h]=sizes[ratio];
   const c=shareEls.canvas,ctx=c.getContext('2d');if(c.width!==w)c.width=w;if(c.height!==h)c.height=h;const r=shareRunRecord,pad=w*.075,L=storyLayout();shareBounds={};
   const base=()=>{if(sharePhotoImage)coverImage(ctx,sharePhotoImage,w,h);else{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#121a14');g.addColorStop(1,'#050706');ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}};base();
-  if(style==='map'){ctx.fillStyle='#071007';ctx.fillRect(0,0,w,h);await drawRouteMap(ctx,r.route,pad,h*.16,w-pad*2,h*.49,34,r.splits,showSplits)}
-  else if(style==='split'){ctx.fillStyle='#071007';ctx.fillRect(w*.54,0,w*.46,h);await drawRouteMap(ctx,r.route,w*.56,h*.15,w*.39,h*.47,30,r.splits,showSplits);if(sharePhotoImage){ctx.save();ctx.beginPath();ctx.rect(0,0,w*.54,h);ctx.clip();coverImage(ctx,sharePhotoImage,w*.54,h);ctx.restore()}}
+  if(style==='map'){ctx.fillStyle='#071007';ctx.fillRect(0,0,w,h);await drawRouteMap(ctx,r.route,pad,h*.16,w-pad*2,h*.49,34,r.splits,true)}
+  else if(style==='split'){ctx.fillStyle='#071007';ctx.fillRect(w*.54,0,w*.46,h);await drawRouteMap(ctx,r.route,w*.56,h*.15,w*.39,h*.47,30,r.splits,true);if(sharePhotoImage){ctx.save();ctx.beginPath();ctx.rect(0,0,w*.54,h);ctx.clip();coverImage(ctx,sharePhotoImage,w*.54,h);ctx.restore()}}
   if(token!==shareRenderToken)return;
   if(style!=='photo'){const shade=ctx.createLinearGradient(0,0,0,h);shade.addColorStop(0,'rgba(0,0,0,.18)');shade.addColorStop(.48,'rgba(0,0,0,.08)');shade.addColorStop(1,'rgba(0,0,0,.88)');ctx.fillStyle=shade;ctx.fillRect(0,0,w,h)}
-  if(style==='photo'){const routeW=w*.32*routeScale,routeH=h*.18*routeScale,routeX=L.route.x*w-routeW/2,routeY=L.route.y*h-routeH/2;drawRouteOverlay(ctx,r.route,routeX,routeY,routeW,routeH,true,r.splits,showSplits);shareBounds.route={x:routeX,y:routeY,w:routeW,h:routeH}}
+  if(style==='photo'){const routeW=w*.32*routeScale,routeH=h*.18*routeScale,routeX=L.route.x*w-routeW/2,routeY=L.route.y*h-routeH/2;drawRouteOverlay(ctx,r.route,routeX,routeY,routeW,routeH,true,r.splits,true);shareBounds.route={x:routeX,y:routeY,w:routeW,h:routeH}}
   const logoX=L.logo.x*w,logoY=L.logo.y*h;ctx.textAlign='center';ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.046*logoScale)}px system-ui`;ctx.fillText('ELDYN',logoX,logoY);ctx.font=`700 ${Math.round(w*.015*logoScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.84)';ctx.fillText('MOVE FORWARD',logoX,logoY+w*.030*logoScale);shareBounds.logo={x:logoX-w*.13*logoScale,y:logoY-w*.05*logoScale,w:w*.26*logoScale,h:w*.09*logoScale};
   const activityLabel=r.activityType==='walk'?(state.settings.language==='ko'?'걷기':'WALK'):(state.settings.language==='ko'?'러닝':'RUN');
   ctx.textAlign='left';ctx.shadowColor='rgba(0,0,0,.42)';ctx.shadowBlur=4;
@@ -1135,7 +1136,15 @@ shareEls.saveLayout?.addEventListener('click',()=>{saveState();alert(state.setti
 function canvasBlob(){return new Promise(resolve=>shareEls.canvas.toBlob(resolve,'image/png',.95))}
 shareEls.download?.addEventListener('click',async()=>{const blob=await canvasBlob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)});
 shareEls.nativeShare?.addEventListener('click',async()=>{const blob=await canvasBlob(),file=new File([blob],`ELDYN-${shareRunRecord.distanceKm.toFixed(2)}KM.png`,{type:'image/png'});if(navigator.canShare?.({files:[file]})){await navigator.share({title:'ELDYN Run',text:'ELDYN Run Certified',files:[file]})}else{alert('Direct sharing is not supported here. Use Save image, then share it from your gallery.')}});
-runEls.start.onclick=beginRun;runEls.pause.onclick=togglePause;runEls.finish.onclick=finishRun;runEls.openMode?.addEventListener('click',enterRunMode);runEls.gpsToggle.addEventListener('change',renderRun);runEls.autoPause.addEventListener('change',renderRun);
+runEls.start.onclick=beginRun;runEls.pause.onclick=togglePause;runEls.finish.onclick=finishRun;runEls.openMode?.addEventListener('click',enterRunMode);runEls.gpsToggle.addEventListener('change',renderRun);runEls.autoPause.addEventListener('change',()=>{
+  if(runSession&&runSession.status==='running'){
+    runSession.autoPauseEnabled=!!runEls.autoPause.checked;
+    runSession.stillSince=null;runSession.speedSamples=[];
+    if(!runSession.autoPauseEnabled&&runSession.autoPaused){runSession.autoPaused=false;if(!runSession.movingSegmentAt)runSession.movingSegmentAt=Date.now()}
+    saveActiveRun('auto-pause-toggle');
+  }
+  renderRun();
+});
 runModeEls.pause?.addEventListener('click',()=>{togglePause();renderRunMode()});runModeEls.finish?.addEventListener('click',finishRun);runModeEls.exit?.addEventListener('click',exitRunMode);runModeEls.lock?.addEventListener('click',()=>setRunModeLocked(true));
 runModeEls.unlock?.addEventListener('pointerdown',()=>{clearTimeout(runModeUnlockTimer);runModeUnlockTimer=setTimeout(()=>setRunModeLocked(false),2000)});['pointerup','pointercancel','pointerleave'].forEach(ev=>runModeEls.unlock?.addEventListener(ev,()=>clearTimeout(runModeUnlockTimer)));
 document.addEventListener('visibilitychange',()=>{
