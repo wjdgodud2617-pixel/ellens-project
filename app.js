@@ -971,6 +971,18 @@ async function renderShareCard(){
   ctx.font=`650 ${Math.round(w*.019*.88)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.82)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);ctx.shadowBlur=0;ctx.textAlign='left';if(style!=='photo'){ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)}
 }
 function openShareCard(id){
+  // v1.2.22.7: invalidate any in-flight preview render and clear the old canvas
+  // before loading the newly selected run. This prevents the previous story
+  // from flashing when CREATE is opened again.
+  shareRenderToken++;
+  shareDrag=null;shareBounds={};
+  if(shareEls.canvas){
+    const clearCtx=shareEls.canvas.getContext('2d');
+    clearCtx.save();clearCtx.setTransform(1,0,0,1,0,0);
+    clearCtx.clearRect(0,0,shareEls.canvas.width,shareEls.canvas.height);
+    clearCtx.fillStyle='#071007';clearCtx.fillRect(0,0,shareEls.canvas.width,shareEls.canvas.height);
+    clearCtx.restore();
+  }
   shareRunRecord=(state.runs||[]).find(r=>String(r.id)===String(id));
   if(!shareRunRecord){
     alert(state.settings.language==='ko'?'선택한 러닝 기록을 찾지 못했어요. 동기화 후 다시 시도해 주세요.':'The selected run could not be found. Sync and try again.');
