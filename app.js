@@ -510,7 +510,7 @@ let runModeUnlockTimer=null;
 function setRunModeLocked(locked){if(!runModeEls.overlay)return;runModeEls.overlay.classList.toggle('is-locked',!!locked);runModeEls.controls.hidden=!!locked;runModeEls.locked.hidden=!locked}
 async function enterRunMode(){if(!runModeEls.overlay||!runSession)return;runModeEls.overlay.hidden=false;document.body.classList.add('run-mode-active');setRunModeLocked(false);requestWakeLock();try{await document.documentElement.requestFullscreen?.()}catch{}renderRunMode()}
 function exitRunMode(){if(!runModeEls.overlay)return;runModeEls.overlay.hidden=true;document.body.classList.remove('run-mode-active');setRunModeLocked(false);try{if(document.fullscreenElement)document.exitFullscreen?.()}catch{}}
-function renderRunMode(){if(!runModeEls.overlay)return;const r=runSession,d=r?r.distanceM/1000:0,ms=r?elapsedMs():0,avgMs=r?(r.autoPauseEnabled?movingMs():ms):0,avgSpeed=d>0&&avgMs>0?d/(avgMs/3600000):0;runModeEls.distance.textContent=d<1?Math.round(d*1000):d.toFixed(2);const modeUnit=document.getElementById('runModeDistanceUnit');if(modeUnit)modeUnit.textContent=d<1?'M':'KM';runModeEls.time.textContent=formatClock(ms);runModeEls.pace.textContent=avgSpeed.toFixed(1);runModeEls.gps.textContent=!r?.gpsEnabled?(state.settings.language==='ko'?'GPS 꺼짐':'GPS OFF'):r?.hasFix?(state.settings.language==='ko'?'GPS 연결':'GPS LIVE'):(state.settings.language==='ko'?'GPS 대기':'GPS WAITING');runModeEls.gps.className='run-mode-gps '+(r?.hasFix?'live':'');runModeEls.accuracy.textContent=`정확도 ${r?.accuracy?Math.round(r.accuracy):'--'}m`;runModeEls.status.textContent=r?.autoPaused?'자동 일시정지 중':r?.status==='paused'?'러닝 일시정지':r?.hasFix?'GPS 경로 기록 중':'GPS 신호를 찾는 중';runModeEls.pause.textContent=r?.status==='paused'?'▶ 다시 시작':'Ⅱ 일시정지'}
+function renderRunMode(){if(!runModeEls.overlay)return;const r=runSession,d=r?r.distanceM/1000:0,ms=r?elapsedMs():0,avgMs=ms,avgSpeed=d>0&&avgMs>0?d/(avgMs/3600000):0;runModeEls.distance.textContent=d<1?Math.round(d*1000):d.toFixed(2);const modeUnit=document.getElementById('runModeDistanceUnit');if(modeUnit)modeUnit.textContent=d<1?'M':'KM';runModeEls.time.textContent=formatClock(ms);runModeEls.pace.textContent=avgSpeed.toFixed(1);runModeEls.gps.textContent=!r?.gpsEnabled?(state.settings.language==='ko'?'GPS 꺼짐':'GPS OFF'):r?.hasFix?(state.settings.language==='ko'?'GPS 연결':'GPS LIVE'):(state.settings.language==='ko'?'GPS 대기':'GPS WAITING');runModeEls.gps.className='run-mode-gps '+(r?.hasFix?'live':'');runModeEls.accuracy.textContent=`정확도 ${r?.accuracy?Math.round(r.accuracy):'--'}m`;runModeEls.status.textContent=r?.autoPaused?'자동 일시정지 중':r?.status==='paused'?'러닝 일시정지':r?.hasFix?'GPS 경로 기록 중':'GPS 신호를 찾는 중';runModeEls.pause.textContent=r?.status==='paused'?'▶ 다시 시작':'Ⅱ 일시정지'}
 const shareEls={
   dialog:document.getElementById('shareRunDialog'),photo:document.getElementById('sharePhotoInput'),ratio:document.getElementById('shareRatioSelect'),style:document.getElementById('shareStyleSelect'),
   caption:document.getElementById('shareCaptionInput'),canvas:document.getElementById('shareCanvas'),render:document.getElementById('renderShareBtn'),
@@ -601,16 +601,32 @@ function haversine(a,b){const R=6371000,toRad=x=>x*Math.PI/180,dLat=toRad(b.lat-
 function formatDistance(distanceKm,{compact=false}={}){const km=Math.max(0,Number(distanceKm)||0);if(km<1){const metres=Math.round(km*1000);return compact?`${metres} m`:`${metres} m`}return `${km.toFixed(2)} km`}
 function elapsedMs(){if(!runSession)return 0;return runSession.elapsedBefore+(runSession.status==='running'?Date.now()-runSession.segmentStartedAt:0)}
 function movingMs(){if(!runSession)return 0;return (runSession.movingMs||0)+(runSession.status==='running'&&!runSession.autoPaused&&runSession.movingSegmentAt?Date.now()-runSession.movingSegmentAt:0)}
+function splitElapsedMsFallback(){if(!runSession||!Array.isArray(runSession.splits)||!runSession.splits.length)return 0;const last=runSession.splits[runSession.splits.length-1];const explicit=Number(last?.elapsedMs);if(Number.isFinite(explicit)&&explicit>=0)return explicit;return runSession.splits.reduce((n,x)=>n+Math.max(0,Number(x?.seconds)||0)*1000,0)}
+function appendKmSplitCrossings(beforeM,afterM,fromPoint,toPoint,fromClockMs,toClockMs){
+  if(!runSession||!Number.isFinite(beforeM)||!Number.isFinite(afterM)||afterM<=beforeM)return;
+  const span=afterM-beforeM,clockA=Math.max(0,Number(fromClockMs)||0),clockB=Math.max(clockA,Number(toClockMs)||clockA);
+  let nextKm=(runSession.splits?.length||0)+1;
+  while(nextKm*1000<=afterM+0.001){
+    const boundary=nextKm*1000;if(boundary<=beforeM){nextKm++;continue}
+    const f=Math.max(0,Math.min(1,(boundary-beforeM)/span));
+    const splitClock=clockA+(clockB-clockA)*f,prevClock=splitElapsedMsFallback();
+    const lat=Number(fromPoint?.lat)+(Number(toPoint?.lat)-Number(fromPoint?.lat))*f;
+    const lon=Number(fromPoint?.lon)+(Number(toPoint?.lon)-Number(fromPoint?.lon))*f;
+    const t=Number(fromPoint?.t)+(Number(toPoint?.t)-Number(fromPoint?.t))*f;
+    runSession.splits.push({km:nextKm,seconds:Math.max(1,(splitClock-prevClock)/1000),elapsedMs:splitClock,lat,lon,t});
+    nextKm++;
+  }
+}
 function formatClock(ms){const sec=Math.max(0,Math.floor(ms/1000)),h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;return [h,m,s].map(x=>String(x).padStart(2,'0')).join(':')}
 function paceText(secPerKm){if(!Number.isFinite(secPerKm)||secPerKm<=0||secPerKm>3600)return `--'--"`;const m=Math.floor(secPerKm/60),s=Math.round(secPerKm%60);return `${m}'${String(s).padStart(2,'0')}"`}
-function runAverageDurationMs(run){const duration=Math.max(0,Number(run?.durationMs)||0),moving=Math.max(0,Number(run?.movingDurationMs)||0);if(run?.autoPauseEnabled&&moving>0)return duration>0?Math.min(moving,duration):moving;return duration||moving}
+function runAverageDurationMs(run){const workout=Math.max(0,Number(run?.workoutDurationMs)||0),duration=Math.max(0,Number(run?.durationMs)||0),moving=Math.max(0,Number(run?.movingDurationMs)||0);return workout||duration||moving}
 function runAveragePace(run){const distance=Math.max(0,Number(run?.distanceKm)||0),ms=runAverageDurationMs(run);if(distance>0&&ms>0)return (ms/1000)/distance;const stored=Number(run?.avgPaceSecKm);return Number.isFinite(stored)&&stored>0?stored:Infinity}
 function runAverageSpeed(run){const pace=runAveragePace(run);return Number.isFinite(pace)&&pace>0?3600/pace:0}
 function runningScore(run){if(!run||!run.distanceKm)return 0;const pace=runAveragePace(run),distance=Math.min(run.distanceKm,10),pacePoints=Math.max(0,Math.min(65,(900-(Number.isFinite(pace)?pace:3600))/7)),distancePoints=Math.min(25,distance*3),finishPoints=run.durationMs>0?10:0;return Math.round(Math.max(0,Math.min(100,pacePoints+distancePoints+finishPoints)))}
 function renderLatestRunAnalysis(){const el=document.getElementById('latestRunAnalysis');if(!el)return;const runs=(state.runs||[]).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));const r=runs[0];if(!r){el.innerHTML='<div class="empty-state"><span>🏃</span><p>Complete a run to see pace, speed and performance insights here.</p></div>';return}const previous=runs[1],avgPace=runAveragePace(r),previousPace=previous?runAveragePace(previous):Infinity,bestSplit=(r.splits||[]).map(x=>+x.seconds).filter(Number.isFinite).sort((a,b)=>a-b)[0],bestPace=bestSplit||avgPace,avgSpeed=runAverageSpeed(r),delta=previous&&Number.isFinite(previousPace)&&Number.isFinite(avgPace)?Math.round(previousPace-avgPace):null,trend=delta===null?'첫 기록이 저장되었습니다.':delta>0?`이전 기록보다 ${delta}초/km 빨라졌어요.`:delta<0?`이전 기록보다 ${Math.abs(delta)}초/km 느려졌어요.`:'이전 기록과 같은 평균 페이스예요.';el.innerHTML=`<div class="latest-run-head"><div><p class="eyebrow">${new Date(r.endedAt).toLocaleDateString()}</p><h3>${formatDistance(r.distanceKm)} run</h3></div><span class="run-score-pill">${runningScore(r)} SCORE</span></div><div class="run-analysis-grid"><div><span>AVERAGE PACE</span><strong>${paceText(avgPace)}</strong><small>/km</small></div><div><span>BEST PACE</span><strong>${paceText(bestPace)}</strong><small>/km</small></div><div><span>AVERAGE SPEED</span><strong>${avgSpeed.toFixed(1)}</strong><small>km/h</small></div><div><span>CALORIES</span><strong>${r.calories||0}</strong><small>kcal</small></div></div><p class="run-trend">${trend}</p>`}
 function runCalories(distanceKm){const weight=+state.settings.currentWeight||78;return Math.round(distanceKm*weight)}
 function renderRun(){
-  const r=runSession,d=r?r.distanceM/1000:0,ms=r?elapsedMs():0,avgMs=r?(r.autoPauseEnabled?movingMs():ms):0,avg=d>0?(avgMs/1000)/d:Infinity;updateRunDocumentTitle();
+  const r=runSession,d=r?r.distanceM/1000:0,ms=r?elapsedMs():0,avgMs=ms,avg=d>0?(avgMs/1000)/d:Infinity;updateRunDocumentTitle();
   runEls.time.textContent=formatClock(ms);runEls.distance.textContent=d<1?Math.round(d*1000):d.toFixed(2);const runDistanceUnit=document.getElementById('runDistanceUnit');if(runDistanceUnit)runDistanceUnit.textContent=d<1?'m':'km';runEls.averagePace.textContent=paceText(avg);
   runEls.movingTime.textContent=formatClock(r?movingMs():0);runEls.topSpeed.textContent=((r?.topSpeedMps||0)*3.6).toFixed(1);runEls.quality.textContent=r?.gpsEnabled?gpsQualityLabel(r?.accuracy):(state.settings.language==='ko'?'GPS 꺼짐':'GPS OFF');drawLiveRoute();
   runEls.currentPace.textContent=paceText(r?.currentPace||Infinity);runEls.calories.textContent=runCalories(d);
@@ -742,16 +758,16 @@ function recoverBackgroundGap(p){
   // missing section as a straight-line bridge only when the displacement is plausible.
   // Cap recovery to 30 minutes to avoid adding a stale jump after a long absence.
   if(gapSec<=1800&&delta>=1&&delta/gapSec<=maxSpeed){
+    const beforeDistance=runSession.distanceM||0;
+    const clockEnd=elapsedMs();
+    const bridgeMs=Math.max(0,p.t-(anchor.t||hiddenAt));
+    const clockStart=Math.max(0,clockEnd-bridgeMs);
     runSession.distanceM+=delta;
     runSession.backgroundRecoveredM=(runSession.backgroundRecoveredM||0)+delta;
     runSession.backgroundRecoveryCount=(runSession.backgroundRecoveryCount||0)+1;
     runSession.movingMs=(runSession.movingMs||0)+Math.max(0,p.t-hiddenAt);
     runSession.route.push({lat:p.lat,lon:p.lon,accuracy:p.accuracy,t:p.t,resumed:true});
-    const completed=Math.floor(runSession.distanceM/1000);
-    while(runSession.splits.length<completed){
-      const totalSec=movingMs()/1000,previous=runSession.splits.reduce((n,x)=>n+x.seconds,0);
-      runSession.splits.push({km:runSession.splits.length+1,seconds:Math.max(1,totalSec-previous),lat:p.lat,lon:p.lon,t:p.t});
-    }
+    appendKmSplitCrossings(beforeDistance,runSession.distanceM,anchor,p,clockStart,clockEnd);
   }
   runSession.lastPoint=p;runSession.distancePoint=p;runSession.lastGpsAt=p.t;runSession.speedSamples=[];runSession.currentPace=Infinity;
   runSession.awaitingResumeFix=false;runSession.stillSince=null;runSession.speedSamples=[];if(!runSession.autoPaused)runSession.movingSegmentAt=Date.now();
@@ -806,16 +822,16 @@ function onGps(pos){
       const maxSegment=runSession.activityType==='walk'?45:80;
       const maxSpeed=runSession.activityType==='walk'?4.5:12;
       if(delta>=minMove&&delta<maxSegment&&segmentSpeed<=maxSpeed){
+        const beforeDistance=runSession.distanceM||0;
+        const clockEnd=elapsedMs();
+        const segmentMs=Math.max(0,p.t-distancePrev.t);
+        const clockStart=Math.max(0,clockEnd-segmentMs);
         runSession.distanceM+=delta;
         runSession.distancePoint=p;
         runSession.currentPace=smooth>.3?1000/smooth:Infinity;
         if(smooth>.3)runSession.topSpeedMps=Math.max(runSession.topSpeedMps||0,smooth);
         runSession.route.push({lat:p.lat,lon:p.lon,accuracy:p.accuracy,t:p.t});
-        const completed=Math.floor(runSession.distanceM/1000);
-        while(runSession.splits.length<completed){
-          const totalSec=movingMs()/1000,previous=runSession.splits.reduce((n,x)=>n+x.seconds,0);
-          runSession.splits.push({km:runSession.splits.length+1,seconds:Math.max(1,totalSec-previous),lat:p.lat,lon:p.lon,t:p.t})
-        }
+        appendKmSplitCrossings(beforeDistance,runSession.distanceM,distancePrev,p,clockStart,clockEnd);
       }
     }
   }else{
@@ -860,11 +876,14 @@ async function finishRun(){
   stopGps();releaseWakeLock();clearRunCompanionNotification();clearInterval(runTimer);runTimer=null;exitRunMode();
   if(distanceKm>=.02){
     const session=runSession;
-    const averageDurationMs=session.autoPauseEnabled&&movingDurationMs>0?Math.min(movingDurationMs,durationMs):durationMs;
-    const avgPaceSecKm=(averageDurationMs/1000)/distanceKm;
-    const avgSpeedKmh=distanceKm/(averageDurationMs/3600000);
+    // Final pace/speed must come from one source of truth: workout duration ÷ final distance.
+    // Do not average split paces and do not swap to movingMs when Auto Pause is enabled.
+    const workoutDurationMs=durationMs;
+    const averageDurationMs=workoutDurationMs;
+    const avgPaceSecKm=(workoutDurationMs/1000)/distanceKm;
+    const avgSpeedKmh=distanceKm/(workoutDurationMs/3600000);
     const record={id:crypto.randomUUID(),activityType:session.activityType||'run',startedAt:session.startedAt,endedAt:new Date().toISOString(),durationMs,distanceKm,
-      avgPaceSecKm,avgSpeedKmh,averageDurationMs,calories:runCalories(distanceKm),splits:session.splits,
+      workoutDurationMs,avgPaceSecKm,avgSpeedKmh,averageDurationMs,calories:runCalories(distanceKm),splits:session.splits,
       movingDurationMs,topSpeedKmh:(session.topSpeedMps||0)*3.6,route:session.route||[],gpsEnabled:session.gpsEnabled,autoPauseEnabled:session.autoPauseEnabled};
     state.runs=state.runs||[];state.runs=mergeRuns(state.runs,[record]);
     const runDate=todayKey();const log=getLog(runDate);log.runs=mergeRuns(log.runs,[record]);
