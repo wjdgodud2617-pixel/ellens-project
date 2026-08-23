@@ -480,7 +480,7 @@ function showCelebration(s){const m=mood(s);celebrationContent.innerHTML=`<div c
 function confetti(){for(let i=0;i<28;i++){const el=document.createElement('i');el.className='confetti';el.style.left=Math.random()*100+'vw';el.style.setProperty('--x',(Math.random()*180-90)+'px');el.style.animationDelay=Math.random()*.5+'s';document.body.appendChild(el);setTimeout(()=>el.remove(),2400)}}
 function renderCalendar(){const y=calendarCursor.getFullYear(),m=calendarCursor.getMonth();monthTitle.textContent=new Intl.DateTimeFormat('en',{month:'long',year:'numeric'}).format(calendarCursor);const first=new Date(y,m,1),days=new Date(y,m+1,0).getDate();let html='';for(let i=0;i<first.getDay();i++)html+='<div class="day blank"></div>';for(let d=1;d<=days;d++){const key=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,s=state.logs[key]?scoreFor(state.logs[key]):0;html+=`<button class="day ${key===todayKey()?'today':''} ${key===selectedDate?'selected':''}" data-date="${key}"><span>${d}</span><span>${s===100?'🤖':s===0?'':'•'}</span><span class="heat"><i style="width:${s}%"></i></span></button>`}calendarGrid.innerHTML=html;renderDaySummary()}
 function renderDaySummary(){const log=state.logs[selectedDate],s=log?scoreFor(log):0,m=mood(s),routine=weeklyPlan[dateFromKey(selectedDate).getDay()];const lang=state.settings.language||'ko';const dayRuns=(state.runs||[]).filter(r=>r?.endedAt&&keyFromDate(new Date(r.endedAt))===selectedDate).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));const runHtml=dayRuns.length?`<div class="calendar-run-list"><p class="eyebrow">${lang==='ko'?'이날의 러닝·걷기 기록':'RUN / WALK RECORDS'}</p>${dayRuns.map(r=>`<div class="run-history-card"><button class="run-history-main" type="button" data-calendar-run-story="${r.id}"><div><h3>${r.activityType==='walk'?(lang==='ko'?'걷기':'Walk'):(lang==='ko'?'러닝':'Run')}</h3><p>${formatClock(r.durationMs)} · ${paceText(runAveragePace(r))}/km</p></div><strong class="history-distance">${formatDistance(r.distanceKm)}</strong></button><button class="mini-edit share-run-btn" type="button" data-calendar-run-story="${r.id}">${lang==='ko'?'인증샷 만들기':'Create story'}</button></div>`).join('')}</div>`:'';daySummary.innerHTML=`<p class="eyebrow">${selectedDate}</p><h2>${escapeHtml(localizeWorkoutName(log?.planName||routine.name))}</h2><p class="muted">${m.emoji} ${s}% complete · ${log?.exercises?.length??routine.exercises.length} exercises</p>${log?`<p>Water ${log.water||0} ml · Sleep ${log.sleep||0} h · Protein ${log.protein||0} g</p>`:'<p>The weekly plan will be created when you open this day.</p>'}${runHtml}<button class="primary-btn" id="openSelectedDay">Open this workout</button>`;document.getElementById('openSelectedDay').onclick=()=>{activeDate=selectedDate;switchView('today');renderToday()};daySummary.querySelectorAll('[data-calendar-run-story]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openShareCard(btn.dataset.calendarRunStory)}))}
-let bodyTrendDays=7,runTrendDays=7,runTrendMetric='distance';
+let bodyTrendDays=7,runTrendDays=7,runTrendMetric='distance',runMonthFilter='2026-08';
 function trendDateLabel(value){const d=new Date(value);return `${d.getMonth()+1}/${d.getDate()}`}
 function trendSvg(rows,{valueKey,formatValue,paceMode=false}){
   if(!rows.length)return `<div class="trend-empty">${state.settings.language==='ko'?'표시할 기록이 아직 없어요.':'No records to chart yet.'}</div>`;
@@ -500,9 +500,21 @@ function renderTrendControls(){
   document.querySelectorAll('#runTrendMetric button').forEach(b=>b.classList.toggle('active',b.dataset.metric===runTrendMetric));
 }
 function renderBodyTrend(){const el=document.getElementById('bodyTrendChart');if(!el)return;const rows=periodRows((state.body||[]).filter(x=>Number.isFinite(+x.weight)&&+x.weight>0).map(x=>({date:x.date,weight:+x.weight})).sort((a,b)=>new Date(a.date)-new Date(b.date)),bodyTrendDays);el.innerHTML=trendSvg(rows,{valueKey:'weight',formatValue:(v)=>`${v.toFixed(1)}kg`})}
-function renderRunTrend(){const el=document.getElementById('runTrendChart');if(!el)return;const rows=periodRows((state.runs||[]).filter(r=>(r.activityType||'run')==='run'&&r.endedAt&&+r.distanceKm>0).map(r=>({date:r.endedAt,distance:+r.distanceKm,pace:runAveragePace(r),time:(+r.durationMs||0)/60000})).sort((a,b)=>new Date(a.date)-new Date(b.date)),runTrendDays);const cfg=runTrendMetric==='pace'?{valueKey:'pace',formatValue:(v)=>paceText(Math.max(0,Math.round(v)))}:runTrendMetric==='time'?{valueKey:'time',formatValue:(v)=>`${Math.round(v)}m`}:{valueKey:'distance',formatValue:(v)=>`${v.toFixed(2)}km`};el.innerHTML=trendSvg(rows,cfg)}
-function renderProgressRunHistory(){const el=document.getElementById('progressRunHistory');if(!el)return;const lang=state.settings.language||'ko',runs=(state.runs||[]).filter(r=>(r.activityType||'run')==='run').slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));el.innerHTML=runs.length?runs.map(r=>`<div class="progress-run-row"><span><b>${new Date(r.endedAt).toLocaleDateString()}</b><small>${formatClock(r.durationMs)} · ${paceText(runAveragePace(r))}/km</small></span><strong>${formatDistance(r.distanceKm)}</strong></div>`).join(''):`<div class="trend-empty">${lang==='ko'?'아직 러닝 기록이 없어요.':'No running records yet.'}</div>`}
-function renderProgress(){const keys=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return keyFromDate(d)});weeklyBars.innerHTML=keys.map(k=>{const s=state.logs[k]?scoreFor(state.logs[k]):0;return`<div class="bar-col"><div class="bar" style="height:${Math.max(s,2)}%"></div><small>${k.slice(8)}</small></div>`}).join('');renderTrendControls();renderBodyTrend();renderRunTrend();renderProgressRunHistory()}
+function runMonthKey(r){if(!r?.endedAt)return'';const d=new Date(r.endedAt);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
+function filteredProgressRuns(){return (state.runs||[]).filter(r=>(r.activityType||'run')==='run'&&r.endedAt&&(!runMonthFilter||runMonthFilter==='ALL'||runMonthKey(r)===runMonthFilter))}
+function ensureRunMonthFilter(){
+  const chart=document.getElementById('runTrendChart');if(!chart)return;
+  let wrap=document.getElementById('runMonthFilterWrap');
+  if(!wrap){wrap=document.createElement('div');wrap.id='runMonthFilterWrap';wrap.style.cssText='display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:8px 0 12px';wrap.innerHTML=`<label for="runMonthFilterSelect" style="font-size:12px;font-weight:800;opacity:.7">MONTH</label><select id="runMonthFilterSelect" style="min-width:132px;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:var(--card,#111);color:inherit;font:inherit"></select>`;chart.parentNode.insertBefore(wrap,chart)}
+  const sel=wrap.querySelector('#runMonthFilterSelect'),months=[...new Set((state.runs||[]).filter(r=>r?.endedAt).map(runMonthKey).filter(Boolean))].sort().reverse();
+  const lang=state.settings.language||'ko',current=`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
+  if(runMonthFilter!=='ALL'&&!months.includes(runMonthFilter))runMonthFilter=months.includes(current)?current:(months[0]||'ALL');
+  sel.innerHTML=`<option value="ALL">${lang==='ko'?'전체 기록':'All records'}</option>`+months.map(m=>{const [y,mo]=m.split('-');return `<option value="${m}">${lang==='ko'?`${y}년 ${+mo}월`:`${new Date(+y,+mo-1,1).toLocaleString('en',{month:'long',year:'numeric'})}`}</option>`}).join('');sel.value=runMonthFilter;
+  sel.onchange=()=>{runMonthFilter=sel.value;renderRunTrend();renderProgressRunHistory()};
+}
+function renderRunTrend(){const el=document.getElementById('runTrendChart');if(!el)return;const rows=periodRows(filteredProgressRuns().filter(r=>+r.distanceKm>0).map(r=>({date:r.endedAt,distance:+r.distanceKm,pace:runAveragePace(r),time:(+r.durationMs||0)/60000})).sort((a,b)=>new Date(a.date)-new Date(b.date)),runTrendDays);const cfg=runTrendMetric==='pace'?{valueKey:'pace',formatValue:(v)=>paceText(Math.max(0,Math.round(v)))}:runTrendMetric==='time'?{valueKey:'time',formatValue:(v)=>`${Math.round(v)}m`}:{valueKey:'distance',formatValue:(v)=>`${v.toFixed(2)}km`};el.innerHTML=trendSvg(rows,cfg)}
+function renderProgressRunHistory(){const el=document.getElementById('progressRunHistory');if(!el)return;const lang=state.settings.language||'ko',runs=filteredProgressRuns().slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));el.innerHTML=runs.length?runs.map(r=>`<div class="progress-run-row"><span><b>${new Date(r.endedAt).toLocaleDateString()}</b><small>${formatClock(r.durationMs)} · ${paceText(runAveragePace(r))}/km${r.manualRecovery?' · MANUAL':''}</small></span><strong>${formatDistance(r.distanceKm)}</strong></div>`).join(''):`<div class="trend-empty">${lang==='ko'?'선택한 월의 러닝 기록이 없어요.':'No running records for this month.'}</div>`}
+function renderProgress(){const keys=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return keyFromDate(d)});weeklyBars.innerHTML=keys.map(k=>{const s=state.logs[k]?scoreFor(state.logs[k]):0;return`<div class="bar-col"><div class="bar" style="height:${Math.max(s,2)}%"></div><small>${k.slice(8)}</small></div>`}).join('');ensureRunMonthFilter();renderTrendControls();renderBodyTrend();renderRunTrend();renderProgressRunHistory()}
 document.getElementById('bodyTrendPeriod')?.addEventListener('click',e=>{const b=e.target.closest('button[data-days]');if(!b)return;bodyTrendDays=+b.dataset.days;renderTrendControls();renderBodyTrend()});
 document.getElementById('runTrendPeriod')?.addEventListener('click',e=>{const b=e.target.closest('button[data-days]');if(!b)return;runTrendDays=+b.dataset.days;renderTrendControls();renderRunTrend()});
 document.getElementById('runTrendMetric')?.addEventListener('click',e=>{const b=e.target.closest('button[data-metric]');if(!b)return;runTrendMetric=b.dataset.metric;renderTrendControls();renderRunTrend()});
@@ -1571,39 +1583,34 @@ setTimeout(()=>{ensureLiveRunMap();liveRunMap?.invalidateSize()},250);document.q
 runEls.historyToggle?.addEventListener('click',()=>{runHistoryExpanded=!runHistoryExpanded;renderRunUi();});
 
 
-// v1.2.22.20 — deep read-only recovery diagnostic.
-// Extends RECOVERY CHECK to inspect the durable IndexedDB run vault as well as
-// pre-cloud local/session snapshots and current memory. No data is written.
-async function collectDeepRecoveryDiagnostics(){
-  const base=collectRecoveryDiagnostics();
-  const found=[...(base.found||[])];
-  const add=(r,source)=>{
-    if(!r||typeof r!=='object'||recoveryDateOfRun(r)!==ELDYN_RECOVERY_TARGET_DATE)return;
-    const item=recoveryRunSummary(r,source),sig=String(item.id||'')+'|'+String(item.endedAt||item.startedAt||'')+'|'+String(item.distanceKm??'');
-    if(!found.some(x=>x.sig===sig))found.push({sig,...item});
-  };
-  let vaultRuns=[],vaultError='';
-  try{vaultRuns=await vaultAllRuns();for(const r of vaultRuns)add(r,'IndexedDB Run Vault')}catch(err){vaultError=String(err?.message||err)}
-  // Check known emergency per-run backups again from the live storage view.
-  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k?.startsWith('eldyn-run-emergency-'))continue;try{add(JSON.parse(localStorage.getItem(k)||'null'),'localStorage.'+k)}catch{}}}catch{}
-  // Read-only cache metadata check. This cannot recover a run by itself, but tells us
-  // which app version/cache is currently controlling the PWA.
-  let cacheNames=[];try{cacheNames=await caches.keys()}catch{}
-  return {...base,found,vaultCount:vaultRuns.length,vaultError,cacheNames};
+// v1.2.22.21 — one-time manual reconstruction for the lost 2026-08-23 run.
+// This record is explicitly flagged as manualRecovery so it cannot be confused with original GPS telemetry.
+const AUG23_MANUAL_RUN_ID='manual-recovery-20260823-tteukseom-5k';
+function buildAug23ManualRun(){
+  // Stylized Ttukseom -> Jamsil Bridge -> return route, used only for the story illustration.
+  const route=[
+    {lat:37.5316,lon:127.0664},{lat:37.5306,lon:127.0718},{lat:37.5288,lon:127.0781},{lat:37.5264,lon:127.0848},
+    {lat:37.5238,lon:127.0911},{lat:37.5207,lon:127.0972},{lat:37.5189,lon:127.1004},
+    {lat:37.5207,lon:127.0972},{lat:37.5238,lon:127.0911},{lat:37.5264,lon:127.0848},{lat:37.5288,lon:127.0781},{lat:37.5306,lon:127.0718},{lat:37.5316,lon:127.0664}
+  ];
+  const splitIndexes=[3,5,6,8,12];
+  const splits=splitIndexes.map((idx,i)=>({km:i+1,seconds:400,lat:route[idx].lat,lon:route[idx].lon,manual:true}));
+  return {id:AUG23_MANUAL_RUN_ID,activityType:'run',startedAt:'2026-08-23T08:00:00+09:00',endedAt:'2026-08-23T08:33:20+09:00',durationMs:2000000,movingDurationMs:2000000,distanceKm:5,calories:0,avgPaceSecPerKm:400,avgSpeedKmh:9,route,splits,manualRecovery:true,syntheticRoute:true,note:'Manual reconstruction: Ttukseom Resort Station Exit 2 → Jamsil Bridge turnaround → return'};
 }
-async function showRecoveryDiagnostics(){
-  const d=await collectDeepRecoveryDiagnostics();
-  let overlay=document.getElementById('eldynRecoveryOverlay');
-  if(!overlay){overlay=document.createElement('div');overlay.id='eldynRecoveryOverlay';overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.9);padding:18px;overflow:auto;color:#fff;font-family:system-ui,-apple-system,sans-serif';document.body.appendChild(overlay)}
-  const esc=v=>String(v??'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
-  const cards=d.found.map((r,i)=>`<div style="border:1px solid #39ff14;border-radius:14px;padding:12px;margin:10px 0;background:#0b0f0c"><b style="color:#39ff14">FOUND #${i+1}</b><div>Source: ${esc(r.source)}</div><div>Run ID: ${esc(r.id||'—')}</div><div>Type: ${esc(String(r.type||'—').toUpperCase())}</div><div>Distance: ${r.distanceKm==null?'—':r.distanceKm.toFixed(3)+' km'}</div><div>Time: ${formatRecoveryDuration(r.durationMs)}</div><div>Route: ${r.routePoints} points · Splits: ${r.splits}</div><div>Ended: ${esc(r.endedAt||'—')}</div></div>`).join('');
-  overlay.innerHTML=`<div style="max-width:620px;margin:auto"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><div><div style="font-size:12px;color:#39ff14;font-weight:800;letter-spacing:.12em">READ-ONLY DEEP DIAGNOSTIC</div><h2 style="margin:4px 0">RECOVERY CHECK · 8/23</h2></div><button id="eldynRecoveryClose" style="border:0;border-radius:12px;padding:10px 14px;background:#fff;color:#000;font-weight:800">닫기</button></div><p style="opacity:.78">Pre-cloud snapshot: ${esc(d.capturedAt)}</p><div style="font-size:30px;font-weight:900;color:${d.found.length?'#39ff14':'#ff665f'}">${d.found.length?'8/23 RUN FOUND':'8/23 RUN NOT FOUND'}</div>${cards||'<p>localStorage, sessionStorage, memory, IndexedDB Run Vault 어디에서도 8/23 러닝 원본을 찾지 못했습니다.</p>'}<div style="margin:12px 0;padding:12px;border-radius:12px;background:#111"><b>Run Vault</b><div>Stored runs: ${d.vaultCount}</div>${d.vaultError?`<div style="color:#ff8b85">Error: ${esc(d.vaultError)}</div>`:''}<div style="margin-top:8px"><b>Active caches</b><br>${(d.cacheNames||[]).map(esc).join('<br>')||'—'}</div></div><details style="margin-top:14px"><summary>검사한 저장 키 보기</summary><pre style="white-space:pre-wrap;font-size:11px;opacity:.75">${esc((d.keys||[]).join('\n'))}</pre></details><button id="eldynRecoveryCopy" style="width:100%;margin-top:16px;border:0;border-radius:14px;padding:14px;background:#39ff14;color:#071007;font-weight:900">진단 결과 복사</button><p style="font-size:12px;opacity:.65">이 진단은 읽기만 하며 Supabase/localStorage/IndexedDB 값을 수정하지 않습니다.</p></div>`;
-  overlay.querySelector('#eldynRecoveryClose').onclick=()=>overlay.remove();
-  overlay.querySelector('#eldynRecoveryCopy').onclick=async()=>{const text=JSON.stringify({...d,found:d.found.map(({raw,...rest})=>rest)},null,2);try{await navigator.clipboard.writeText(text);alert('진단 결과를 복사했어요.')}catch{prompt('아래 내용을 복사해 주세요.',text)}};
+function ensureAug23ManualRecovery(){
+  const record=buildAug23ManualRun();
+  const exists=allKnownRuns().some(r=>String(r?.id)===AUG23_MANUAL_RUN_ID);
+  if(exists)return false;
+  state.runs=mergeRuns(state.runs,[record]);
+  const log=getLog('2026-08-23');log.runs=mergeRuns(log.runs,[record]);log.updatedAt=new Date().toISOString();state.logs['2026-08-23']=log;
+  try{safePersistState()}catch(e){console.warn('Manual run local save failed',e)}
+  try{if(typeof putRunInVault==='function')putRunInVault(record)}catch(e){console.warn('Manual run vault save failed',e)}
+  return true;
 }
-function installRecoveryCheckButton(){
-  const old=document.getElementById('eldynRecoveryCheckBtn');if(old)old.remove();
-  const b=document.createElement('button');b.id='eldynRecoveryCheckBtn';b.type='button';b.textContent='DEEP RECOVERY CHECK';b.style.cssText='position:fixed;right:14px;bottom:92px;z-index:2147483000;border:0;border-radius:999px;padding:12px 16px;background:#39ff14;color:#071007;font:900 11px system-ui;box-shadow:0 8px 28px rgba(0,0,0,.35)';b.addEventListener('click',()=>{b.disabled=true;b.textContent='CHECKING…';Promise.resolve(showRecoveryDiagnostics()).finally(()=>{b.disabled=false;b.textContent='DEEP RECOVERY CHECK'})});document.body.appendChild(b);
+function syncAug23ManualRecovery(){
+  let attempts=0;const timer=setInterval(async()=>{attempts++;try{
+    if(supabaseClient&&currentUser&&cloudHydrated){clearInterval(timer);const record=buildAug23ManualRun();state.runs=mergeRuns(state.runs,[record]);const log=getLog('2026-08-23');log.runs=mergeRuns(log.runs,[record]);state.logs['2026-08-23']=log;safePersistState();await saveDailyLogNow('2026-08-23',{verify:false});renderToday();renderProgress();renderCalendar();}
+  }catch(e){console.warn('Manual run cloud sync failed',e)}if(attempts>=24)clearInterval(timer)},2500);
 }
 
 // v1.2.7 — reliable application bootstrap and Supabase login initialization.
@@ -1619,6 +1626,7 @@ async function bootstrapEldyn(){
   if(eldynBootstrapStarted)return;
   eldynBootstrapStarted=true;
   try{installRecoveryCheckButton()}catch(error){console.warn('Recovery check UI failed:',error)}
+  try{ensureAug23ManualRecovery()}catch(error){console.warn('Manual 8/23 recovery failed:',error)}
   try{
     render();
     renderRun();
@@ -1634,6 +1642,7 @@ async function bootstrapEldyn(){
     return;
   }
   await initSupabase();
+  try{syncAug23ManualRecovery()}catch(error){console.warn('Manual 8/23 cloud retry failed:',error)}
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootstrapEldyn,{once:true});
 else bootstrapEldyn();
