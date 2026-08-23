@@ -112,6 +112,42 @@ function stateTimestamp(value){const times=Object.values(value?.logs||{}).map(x=
 function loadState(){try{const candidates=[localStorage.getItem(STORAGE_KEY),localStorage.getItem(STORAGE_BACKUP_KEY),localStorage.getItem('ellens-project-v2'),localStorage.getItem('ellens-project-v1')].filter(Boolean).map(raw=>JSON.parse(raw));const parsed=candidates.sort((a,b)=>stateTimestamp(b)-stateTimestamp(a))[0]||{};return {...clone(defaults),...parsed,settings:{...clone(defaults).settings,...(parsed.settings||{})}}}catch{return clone(defaults)}}
 function saveState(){const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);scheduleCloudSync()}
 function markLogChanged(date=activeDate){const log=getLog(date);log.updatedAt=new Date().toISOString();saveState();return log}
+const PENDING_RUN_SYNC_KEY='eldyn-pending-run-sync-v1';
+function pendingRunSyncQueue(){try{return JSON.parse(localStorage.getItem(PENDING_RUN_SYNC_KEY)||'[]').filter(x=>x?.date&&x?.runId)}catch{return[]}}
+function queueRunSync(date,runId){const q=pendingRunSyncQueue().filter(x=>!(x.date===date&&String(x.runId)===String(runId)));q.push({date,runId,queuedAt:new Date().toISOString()});localStorage.setItem(PENDING_RUN_SYNC_KEY,JSON.stringify(q))}
+function clearRunSync(date,runId){const q=pendingRunSyncQueue().filter(x=>!(x.date===date&&String(x.runId)===String(runId)));if(q.length)localStorage.setItem(PENDING_RUN_SYNC_KEY,JSON.stringify(q));else localStorage.removeItem(PENDING_RUN_SYNC_KEY)}
+function runExistsInPayload(payload,runId){const p=parsePayload(payload);return (Array.isArray(p?.runs)?p.runs:[]).some(r=>String(r?.id)===String(runId))}
+async function saveRunRecordNow(date,runId,{attempts=3}={}){
+  const local=state.logs?.[date],record=(Array.isArray(local?.runs)?local.runs:[]).find(r=>String(r?.id)===String(runId));
+  if(!local||!record){clearRunSync(date,runId);return false}
+  if(!supabaseClient||!currentUser){queueRunSync(date,runId);return false}
+  queueRunSync(date,runId);syncStatus.textContent='Saving run to cloud…';
+  for(let attempt=0;attempt<attempts;attempt++){
+    try{
+      const {data:remoteRows,error:readError}=await supabaseClient.from('daily_logs').select('payload,updated_at').eq('user_id',currentUser.id).eq('date',date).limit(1);
+      if(readError)throw readError;
+      const remote=remoteRows?.[0];
+      const merged=mergeDailyLog(state.logs[date]||local,remote?.payload||{},remote?.updated_at);
+      merged.runs=mergeRuns(merged.runs,[record]);
+      merged.updatedAt=new Date().toISOString();
+      const {error:writeError}=await supabaseClient.from('daily_logs').upsert({user_id:currentUser.id,date,payload:merged,updated_at:merged.updatedAt},{onConflict:'user_id,date'});
+      if(writeError)throw writeError;
+      const {data:check,error:checkError}=await supabaseClient.from('daily_logs').select('payload,updated_at').eq('user_id',currentUser.id).eq('date',date).limit(1);
+      if(checkError)throw checkError;
+      const saved=check?.[0];
+      if(saved&&runExistsInPayload(saved.payload,runId)){
+        state.logs[date]=mergeDailyLog(state.logs[date]||{},saved.payload,saved.updated_at);
+        restoreRunsFromDailyLogs();
+        const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
+        clearRunSync(date,runId);syncStatus.textContent='✓ Run synced to cloud';return true;
+      }
+    }catch(err){console.warn('Run cloud save attempt failed',attempt+1,err)}
+    await new Promise(r=>setTimeout(r,600*(attempt+1)));
+  }
+  queueRunSync(date,runId);syncStatus.textContent='Run saved on this phone · cloud retry pending';return false;
+}
+async function flushPendingRunSyncs(){if(!supabaseClient||!currentUser)return false;const q=pendingRunSyncQueue();let all=true;for(const item of q){const ok=await saveRunRecordNow(item.date,item.runId,{attempts:2});all=all&&ok}return all}
+window.addEventListener('online',()=>{flushPendingRunSyncs().catch(()=>{})});
 async function saveDailyLogNow(date=activeDate,{verify=true}={}){if(!supabaseClient||!currentUser||!cloudHydrated)return false;const local=state.logs[date];if(!local||isFuturePlaceholder(date,local))return false;syncStatus.textContent='Saving meal…';for(let attempt=0;attempt<2;attempt++){const {data:remoteRows,error:readError}=await supabaseClient.from('daily_logs').select('payload,updated_at').eq('user_id',currentUser.id).eq('date',date).limit(1);if(readError)continue;const remote=remoteRows?.[0];const merged=mergeDailyLog(local,remote?.payload||{},remote?.updated_at);const {error}=await supabaseClient.from('daily_logs').upsert({user_id:currentUser.id,date,payload:merged,updated_at:merged.updatedAt},{onConflict:'user_id,date'});if(error)continue;state.logs[date]=merged;const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);if(!verify){syncStatus.textContent='Saved to cloud.';return true}const {data:check,error:checkError}=await supabaseClient.from('daily_logs').select('payload').eq('user_id',currentUser.id).eq('date',date).limit(1);const saved=parsePayload(check?.[0]?.payload);if(!checkError&&mealPlansEquivalent(merged.mealPlan,saved.mealPlan)){syncStatus.textContent='✓ Meal saved to cloud';return true}}syncStatus.textContent='Meal save pending — tap Sync';return false}
 function mealPlansEquivalent(a,b){const clean=v=>(Array.isArray(v)?v:[]).map(m=>({key:m?.key||'',done:!!m?.done,customText:m?.customText||'',foodItems:(Array.isArray(m?.foodItems)?m.foodItems:[]).map(x=>({name:x?.name||'',amount:+x?.amount||0,unit:x?.unit||'',kcal:+x?.kcal||0,protein:+x?.protein||0,carbs:+x?.carbs||0,fat:+x?.fat||0}))}));return JSON.stringify(clean(a))===JSON.stringify(clean(b))}
 function plannedExercises(date){return clone(weeklyPlan[dateFromKey(date).getDay()].exercises).map(x=>({...x,id:x.id+'-'+date,done:false}))}
@@ -497,7 +533,7 @@ async function cloudSync(show=false){
   if(!error&&futurePlaceholders.length)await supabaseClient.from('daily_logs').delete().eq('user_id',currentUser.id).in('date',futurePlaceholders);
   restoreRunsFromDailyLogs();
   const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
-  syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(show)alert(error?error.message:'Sync complete.');
+  syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(!error)await flushPendingRunSyncs();if(show)alert(error?error.message:'Sync complete.');
 }
 async function cloudPull(){
   if(!supabaseClient||!currentUser)return;
@@ -516,7 +552,7 @@ async function cloudPull(){
   restoreRunsFromDailyLogs();
   activeDate=todayKey();selectedDate=todayKey();
   const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
-  cloudHydrated=true;render();syncStatus.textContent=futurePlaceholders.length?'Cloud restored · future placeholder removed.':'Cloud data restored.';
+  cloudHydrated=true;render();syncStatus.textContent=futurePlaceholders.length?'Cloud restored · future placeholder removed.':'Cloud data restored.';await flushPendingRunSyncs();
 }
 
 
@@ -927,12 +963,18 @@ async function finishRun(){
       restoreRunsFromDailyLogs();
       const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
       const savedId=record.id;
+      activeDate=runDate;selectedDate=runDate;
       runSession=null;saveActiveRun();
       renderRun();renderToday();renderProgress();renderCalendar();
       openShareCard(savedId);
 
-      clearTimeout(syncTimer);
-      saveDailyLogNow(runDate,{verify:false}).catch(()=>{}).finally(()=>scheduleCloudSync());
+      // Keep the UI immediate, but persist this exact run to Supabase and verify it by run ID.
+      // If the network is unavailable, leave a durable retry queue so desktop/mobile converge later.
+      clearTimeout(syncTimer);queueRunSync(runDate,savedId);
+      saveRunRecordNow(runDate,savedId).then(ok=>{
+        if(ok){renderToday();renderProgress();renderCalendar()}
+        else scheduleCloudSync();
+      }).catch(()=>scheduleCloudSync());
     }else{
       runSession=null;saveActiveRun();renderRun();
     }
