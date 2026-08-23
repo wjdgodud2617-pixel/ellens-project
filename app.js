@@ -256,7 +256,20 @@ function renderPlan(){
   const order=[1,2,3,4,5,6,0],names=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   grid.innerHTML=order.map((day,idx)=>{const dt=new Date(monday);dt.setDate(monday.getDate()+idx);const key=keyFromDate(dt),plan=weeklyPlan[day],isToday=key===todayKey();return `<article class="plan-day-card ${isToday?'today-plan':''}"><div class="plan-day-head"><div><p class="eyebrow">${isToday?'TODAY':names[day].toUpperCase()}</p><h3>${escapeHtml(localizeWorkoutName(plan.name))}</h3><p class="muted">${new Intl.DateTimeFormat('en',{month:'short',day:'numeric'}).format(dt)}</p></div><span class="routine-count">${plan.exercises.length} ${state.settings.language==='ko'?'개 운동':'EXERCISES'}</span></div><div class="plan-exercises">${plan.exercises.map(x=>`<span class="plan-chip">${escapeHtml(localizeWorkoutName(x.name))}</span>`).join('')}</div><button class="secondary-btn plan-open-btn" data-open-plan-date="${key}">${state.settings.language==='ko'?'열기·수정':'Open & customise'}</button></article>`}).join('');
 }
-function latestRunsForDashboard(){const base=Array.isArray(state.runs)?state.runs:[];const runs=mergeRuns(base,lastFinishedRunPreview?[lastFinishedRunPreview]:[]).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));const today=todayKey(),yesterday=shiftDate(today,-1);return runs.filter(r=>{const k=keyFromDate(new Date(r.endedAt));return k===today||k===yesterday}).slice(0,2)}
+function latestRunsForDashboard(){
+  // Dashboard must not depend on only state.runs: a just-finished run is first written
+  // into today's daily log and cloud hydration may refresh state.runs asynchronously.
+  let runs=Array.isArray(state.runs)?state.runs:[];
+  for(const log of Object.values(state.logs||{}))runs=mergeRuns(runs,log?.runs);
+  if(lastFinishedRunPreview)runs=mergeRuns(runs,[lastFinishedRunPreview]);
+  const today=todayKey(),yesterday=shiftDate(today,-1);
+  return runs.slice().sort((a,b)=>Date.parse(b?.endedAt||0)-Date.parse(a?.endedAt||0)).filter(r=>{
+    const ended=new Date(r?.endedAt||r?.startedAt||0);
+    if(Number.isNaN(ended.getTime()))return false;
+    const k=zonedDateKey(ended);
+    return k===today||k===yesterday;
+  }).slice(0,2)
+}
 function renderDashboardRunCard(){
   const el=document.getElementById('dashboardRunCard');
   if(!el)return;
@@ -977,7 +990,7 @@ async function finishRun(){
         movingDurationMs,topSpeedKmh:(session.topSpeedMps||0)*3.6,route:session.route||[],gpsEnabled:session.gpsEnabled,autoPauseEnabled:session.autoPauseEnabled};
       state.runs=state.runs||[];state.runs=mergeRuns(state.runs,[record]);
       lastFinishedRunPreview=record;
-      const runDate=todayKey();const log=getLog(runDate);log.runs=mergeRuns(log.runs,[record]);
+      const runDate=zonedDateKey(new Date(record.endedAt));const log=getLog(runDate);log.runs=mergeRuns(log.runs,[record]);
       const activityName=record.activityType==='walk'?'Walking':'Running';
       if(!log.exercises.some(x=>x.runRecordId===record.id))log.exercises.push({id:`gps-${record.id}`,runRecordId:record.id,name:activityName,sets:1,reps:Math.max(1,Math.round(record.durationMs/60000)),weight:0,target:'Cardio · Endurance',instructions:`${formatDistance(record.distanceKm)} · ${formatClock(record.durationMs)} · ${paceText(record.avgPaceSecKm)}/km`,youtube:'',search:'',done:true,gpsActivity:true});
       log.priorities.workout=true;log.updatedAt=new Date().toISOString();
