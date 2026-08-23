@@ -1570,6 +1570,42 @@ setTimeout(()=>{ensureLiveRunMap();liveRunMap?.invalidateSize()},250);document.q
 
 runEls.historyToggle?.addEventListener('click',()=>{runHistoryExpanded=!runHistoryExpanded;renderRunUi();});
 
+
+// v1.2.22.20 — deep read-only recovery diagnostic.
+// Extends RECOVERY CHECK to inspect the durable IndexedDB run vault as well as
+// pre-cloud local/session snapshots and current memory. No data is written.
+async function collectDeepRecoveryDiagnostics(){
+  const base=collectRecoveryDiagnostics();
+  const found=[...(base.found||[])];
+  const add=(r,source)=>{
+    if(!r||typeof r!=='object'||recoveryDateOfRun(r)!==ELDYN_RECOVERY_TARGET_DATE)return;
+    const item=recoveryRunSummary(r,source),sig=String(item.id||'')+'|'+String(item.endedAt||item.startedAt||'')+'|'+String(item.distanceKm??'');
+    if(!found.some(x=>x.sig===sig))found.push({sig,...item});
+  };
+  let vaultRuns=[],vaultError='';
+  try{vaultRuns=await vaultAllRuns();for(const r of vaultRuns)add(r,'IndexedDB Run Vault')}catch(err){vaultError=String(err?.message||err)}
+  // Check known emergency per-run backups again from the live storage view.
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k?.startsWith('eldyn-run-emergency-'))continue;try{add(JSON.parse(localStorage.getItem(k)||'null'),'localStorage.'+k)}catch{}}}catch{}
+  // Read-only cache metadata check. This cannot recover a run by itself, but tells us
+  // which app version/cache is currently controlling the PWA.
+  let cacheNames=[];try{cacheNames=await caches.keys()}catch{}
+  return {...base,found,vaultCount:vaultRuns.length,vaultError,cacheNames};
+}
+async function showRecoveryDiagnostics(){
+  const d=await collectDeepRecoveryDiagnostics();
+  let overlay=document.getElementById('eldynRecoveryOverlay');
+  if(!overlay){overlay=document.createElement('div');overlay.id='eldynRecoveryOverlay';overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.9);padding:18px;overflow:auto;color:#fff;font-family:system-ui,-apple-system,sans-serif';document.body.appendChild(overlay)}
+  const esc=v=>String(v??'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+  const cards=d.found.map((r,i)=>`<div style="border:1px solid #39ff14;border-radius:14px;padding:12px;margin:10px 0;background:#0b0f0c"><b style="color:#39ff14">FOUND #${i+1}</b><div>Source: ${esc(r.source)}</div><div>Run ID: ${esc(r.id||'—')}</div><div>Type: ${esc(String(r.type||'—').toUpperCase())}</div><div>Distance: ${r.distanceKm==null?'—':r.distanceKm.toFixed(3)+' km'}</div><div>Time: ${formatRecoveryDuration(r.durationMs)}</div><div>Route: ${r.routePoints} points · Splits: ${r.splits}</div><div>Ended: ${esc(r.endedAt||'—')}</div></div>`).join('');
+  overlay.innerHTML=`<div style="max-width:620px;margin:auto"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><div><div style="font-size:12px;color:#39ff14;font-weight:800;letter-spacing:.12em">READ-ONLY DEEP DIAGNOSTIC</div><h2 style="margin:4px 0">RECOVERY CHECK · 8/23</h2></div><button id="eldynRecoveryClose" style="border:0;border-radius:12px;padding:10px 14px;background:#fff;color:#000;font-weight:800">닫기</button></div><p style="opacity:.78">Pre-cloud snapshot: ${esc(d.capturedAt)}</p><div style="font-size:30px;font-weight:900;color:${d.found.length?'#39ff14':'#ff665f'}">${d.found.length?'8/23 RUN FOUND':'8/23 RUN NOT FOUND'}</div>${cards||'<p>localStorage, sessionStorage, memory, IndexedDB Run Vault 어디에서도 8/23 러닝 원본을 찾지 못했습니다.</p>'}<div style="margin:12px 0;padding:12px;border-radius:12px;background:#111"><b>Run Vault</b><div>Stored runs: ${d.vaultCount}</div>${d.vaultError?`<div style="color:#ff8b85">Error: ${esc(d.vaultError)}</div>`:''}<div style="margin-top:8px"><b>Active caches</b><br>${(d.cacheNames||[]).map(esc).join('<br>')||'—'}</div></div><details style="margin-top:14px"><summary>검사한 저장 키 보기</summary><pre style="white-space:pre-wrap;font-size:11px;opacity:.75">${esc((d.keys||[]).join('\n'))}</pre></details><button id="eldynRecoveryCopy" style="width:100%;margin-top:16px;border:0;border-radius:14px;padding:14px;background:#39ff14;color:#071007;font-weight:900">진단 결과 복사</button><p style="font-size:12px;opacity:.65">이 진단은 읽기만 하며 Supabase/localStorage/IndexedDB 값을 수정하지 않습니다.</p></div>`;
+  overlay.querySelector('#eldynRecoveryClose').onclick=()=>overlay.remove();
+  overlay.querySelector('#eldynRecoveryCopy').onclick=async()=>{const text=JSON.stringify({...d,found:d.found.map(({raw,...rest})=>rest)},null,2);try{await navigator.clipboard.writeText(text);alert('진단 결과를 복사했어요.')}catch{prompt('아래 내용을 복사해 주세요.',text)}};
+}
+function installRecoveryCheckButton(){
+  const old=document.getElementById('eldynRecoveryCheckBtn');if(old)old.remove();
+  const b=document.createElement('button');b.id='eldynRecoveryCheckBtn';b.type='button';b.textContent='DEEP RECOVERY CHECK';b.style.cssText='position:fixed;right:14px;bottom:92px;z-index:2147483000;border:0;border-radius:999px;padding:12px 16px;background:#39ff14;color:#071007;font:900 11px system-ui;box-shadow:0 8px 28px rgba(0,0,0,.35)';b.addEventListener('click',()=>{b.disabled=true;b.textContent='CHECKING…';Promise.resolve(showRecoveryDiagnostics()).finally(()=>{b.disabled=false;b.textContent='DEEP RECOVERY CHECK'})});document.body.appendChild(b);
+}
+
 // v1.2.7 — reliable application bootstrap and Supabase login initialization.
 let eldynBootstrapStarted=false;
 async function waitForSupabaseLibrary(timeoutMs=8000){
