@@ -88,6 +88,74 @@ const defaults={runs:[],settings:{name:'Ellen',sex:'female',age:37,height:160,cu
 const APP_TIME_ZONE='Asia/Seoul';
 let state=loadState(),runSession=null,runTimer=null,runWatchId=null,runWakeLock=null,activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null,cloudHydrated=false,lastFinishedRunPreview=null;
 const LAST_RUN_SNAPSHOT_KEY='eldyn-last-run-snapshot-v1';
+// v1.2.22.18 — read-only iPhone recovery diagnostics.
+// Snapshot storage immediately, before any cloud hydration can change in-memory state.
+const ELDYN_RECOVERY_TARGET_DATE='2026-08-23';
+function captureRecoveryStorageSnapshot(){
+  const out={capturedAt:new Date().toISOString(),local:{},session:{}};
+  for(const [label,store] of [['local',localStorage],['session',sessionStorage]]){
+    try{for(let i=0;i<store.length;i++){const k=store.key(i);if(k)out[label][k]=store.getItem(k)}}catch(err){out[label]._error=String(err?.message||err)}
+  }
+  return out;
+}
+const ELDYN_RECOVERY_STORAGE_SNAPSHOT=captureRecoveryStorageSnapshot();
+function parseRecoveryJson(raw){try{return typeof raw==='string'?JSON.parse(raw):raw}catch{return raw}}
+function recoveryDateOfRun(r){
+  if(!r||typeof r!=='object')return '';
+  const direct=String(r.date||r.day||r.dateKey||'');if(/^2026-08-23(?:$|T)/.test(direct))return ELDYN_RECOVERY_TARGET_DATE;
+  for(const key of ['endedAt','startedAt','createdAt','savedAt','t']){
+    const v=r[key];if(!v)continue;const d=new Date(typeof v==='number'?v:v);if(!Number.isNaN(d.getTime())&&zonedDateKey(d)===ELDYN_RECOVERY_TARGET_DATE)return ELDYN_RECOVERY_TARGET_DATE;
+  }
+  return '';
+}
+function recoveryRunSummary(r,source){
+  const distanceKm=Number(r?.distanceKm ?? (Number(r?.distanceM)/1000));
+  const durationMs=Number(r?.durationMs ?? r?.elapsedMs ?? r?.workoutDurationMs ?? r?.movingDurationMs ?? 0);
+  const route=Array.isArray(r?.route)?r.route:[];
+  return {source,id:r?.id||'',date:recoveryDateOfRun(r),type:r?.activityType||r?.type||r?.activity||'',distanceKm:Number.isFinite(distanceKm)?distanceKm:null,durationMs:Number.isFinite(durationMs)?durationMs:null,routePoints:route.length,splits:Array.isArray(r?.splits)?r.splits.length:0,endedAt:r?.endedAt||'',startedAt:r?.startedAt||'',raw:r};
+}
+function scanRecoveryValue(value,path,found,seen,depth=0){
+  if(depth>9||value==null)return;
+  if(typeof value==='string'){
+    if(value.length>2&&(/[\[{]/.test(value[0])))scanRecoveryValue(parseRecoveryJson(value),path,found,seen,depth+1);
+    return;
+  }
+  if(typeof value!=='object'||seen.has(value))return;seen.add(value);
+  if(Array.isArray(value)){
+    value.forEach((v,i)=>scanRecoveryValue(v,`${path}[${i}]`,found,seen,depth+1));return;
+  }
+  const looksRun=!!(value.id&&(value.distanceKm!=null||value.distanceM!=null||Array.isArray(value.route)||value.endedAt||value.startedAt));
+  if(looksRun&&recoveryDateOfRun(value)===ELDYN_RECOVERY_TARGET_DATE){
+    const sig=String(value.id||'')+'|'+String(value.endedAt||value.startedAt||'')+'|'+String(value.distanceKm??value.distanceM??'');
+    if(!found.some(x=>x.sig===sig))found.push({sig,...recoveryRunSummary(value,path)});
+  }
+  for(const [k,v] of Object.entries(value))scanRecoveryValue(v,`${path}.${k}`,found,seen,depth+1);
+}
+function collectRecoveryDiagnostics(){
+  const found=[];
+  const snap=ELDYN_RECOVERY_STORAGE_SNAPSHOT;
+  for(const [area,entries] of [['local',snap.local],['session',snap.session]])for(const [k,raw] of Object.entries(entries||{}))scanRecoveryValue(parseRecoveryJson(raw),`${area}Storage.${k}`,found,new WeakSet());
+  // Also inspect current in-memory values without modifying them.
+  scanRecoveryValue(state,'memory.state',found,new WeakSet());
+  scanRecoveryValue(runSession,'memory.runSession',found,new WeakSet());
+  scanRecoveryValue(lastFinishedRunPreview,'memory.lastFinishedRunPreview',found,new WeakSet());
+  const keys=[...Object.keys(snap.local||{}).map(k=>'local:'+k),...Object.keys(snap.session||{}).map(k=>'session:'+k)];
+  return {capturedAt:snap.capturedAt,targetDate:ELDYN_RECOVERY_TARGET_DATE,found,keys,pending:(()=>{try{return parseRecoveryJson(snap.local?.[PENDING_RUN_SYNC_KEY]||'[]')}catch{return[]}})()};
+}
+function formatRecoveryDuration(ms){if(!Number.isFinite(ms)||ms<=0)return '—';return formatClock(ms)}
+function showRecoveryDiagnostics(){
+  const d=collectRecoveryDiagnostics();
+  let overlay=document.getElementById('eldynRecoveryOverlay');
+  if(!overlay){overlay=document.createElement('div');overlay.id='eldynRecoveryOverlay';overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.88);padding:18px;overflow:auto;color:#fff;font-family:system-ui,-apple-system,sans-serif';document.body.appendChild(overlay)}
+  const cards=d.found.map((r,i)=>`<div style="border:1px solid #39ff14;border-radius:14px;padding:12px;margin:10px 0;background:#0b0f0c"><b style="color:#39ff14">FOUND #${i+1}</b><div>Source: ${String(r.source).replace(/</g,'&lt;')}</div><div>Run ID: ${String(r.id||'—').replace(/</g,'&lt;')}</div><div>Type: ${String(r.type||'—').toUpperCase()}</div><div>Distance: ${r.distanceKm==null?'—':r.distanceKm.toFixed(3)+' km'}</div><div>Time: ${formatRecoveryDuration(r.durationMs)}</div><div>Route: ${r.routePoints} points · Splits: ${r.splits}</div><div>Ended: ${String(r.endedAt||'—')}</div></div>`).join('');
+  overlay.innerHTML=`<div style="max-width:620px;margin:auto"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><div><div style="font-size:12px;color:#39ff14;font-weight:800;letter-spacing:.12em">READ-ONLY DIAGNOSTIC</div><h2 style="margin:4px 0">RECOVERY CHECK · 8/23</h2></div><button id="eldynRecoveryClose" style="border:0;border-radius:12px;padding:10px 14px;background:#fff;color:#000;font-weight:800">닫기</button></div><p style="opacity:.78">Captured before cloud sync: ${d.capturedAt}</p><div style="font-size:30px;font-weight:900;color:${d.found.length?'#39ff14':'#ff665f'}">${d.found.length?'8/23 RUN FOUND':'8/23 RUN NOT FOUND'}</div>${cards||'<p>현재 아이폰 저장공간 snapshot에서 8/23 러닝 객체를 찾지 못했습니다.</p>'}<details style="margin-top:14px"><summary>검사한 저장 키 보기</summary><pre style="white-space:pre-wrap;font-size:11px;opacity:.75">${d.keys.join('\n')}</pre></details><button id="eldynRecoveryCopy" style="width:100%;margin-top:16px;border:0;border-radius:14px;padding:14px;background:#39ff14;color:#071007;font-weight:900">진단 결과 복사</button><p style="font-size:12px;opacity:.65">이 화면은 읽기만 하며 Supabase/localStorage 값을 수정하지 않습니다.</p></div>`;
+  overlay.querySelector('#eldynRecoveryClose').onclick=()=>overlay.remove();
+  overlay.querySelector('#eldynRecoveryCopy').onclick=async()=>{const text=JSON.stringify({...d,found:d.found.map(({raw,...rest})=>rest)},null,2);try{await navigator.clipboard.writeText(text);alert('진단 결과를 복사했어요.')}catch{prompt('아래 내용을 복사해 주세요.',text)}};
+}
+function installRecoveryCheckButton(){
+  if(document.getElementById('eldynRecoveryCheckBtn'))return;
+  const b=document.createElement('button');b.id='eldynRecoveryCheckBtn';b.type='button';b.textContent='RECOVERY CHECK';b.style.cssText='position:fixed;right:14px;bottom:92px;z-index:2147483000;border:0;border-radius:999px;padding:12px 16px;background:#39ff14;color:#071007;font:900 12px system-ui;box-shadow:0 8px 28px rgba(0,0,0,.35)';b.addEventListener('click',showRecoveryDiagnostics);document.body.appendChild(b);
+}
 function saveLastRunSnapshot(run){if(!run)return;lastFinishedRunPreview=run;try{localStorage.setItem(LAST_RUN_SNAPSHOT_KEY,JSON.stringify(run))}catch(err){try{sessionStorage.setItem(LAST_RUN_SNAPSHOT_KEY,JSON.stringify(run))}catch{}}}
 function loadLastRunSnapshot(){for(const store of [localStorage,sessionStorage]){try{const raw=store.getItem(LAST_RUN_SNAPSHOT_KEY);if(raw){const r=JSON.parse(raw);if(r?.id)return r}}catch{}}return null}
 function allKnownRuns(){let runs=Array.isArray(state.runs)?state.runs:[];for(const log of Object.values(state.logs||{}))runs=mergeRuns(runs,log?.runs);const snap=lastFinishedRunPreview||loadLastRunSnapshot();if(snap)runs=mergeRuns(runs,[snap]);return runs}
@@ -1498,6 +1566,7 @@ async function waitForSupabaseLibrary(timeoutMs=8000){
 async function bootstrapEldyn(){
   if(eldynBootstrapStarted)return;
   eldynBootstrapStarted=true;
+  try{installRecoveryCheckButton()}catch(error){console.warn('Recovery check UI failed:',error)}
   try{
     render();
     renderRun();
