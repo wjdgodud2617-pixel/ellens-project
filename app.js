@@ -110,12 +110,32 @@ function isMeaningfulLog(log){
 function isFuturePlaceholder(date,log){return isFutureDateKey(date)&&!isMeaningfulLog(log)}
 function stateTimestamp(value){const times=Object.values(value?.logs||{}).map(x=>Date.parse(x?.updatedAt||0)||0);return Math.max(0,...times)}
 function loadState(){try{const candidates=[localStorage.getItem(STORAGE_KEY),localStorage.getItem(STORAGE_BACKUP_KEY),localStorage.getItem('ellens-project-v2'),localStorage.getItem('ellens-project-v1')].filter(Boolean).map(raw=>JSON.parse(raw));const parsed=candidates.sort((a,b)=>stateTimestamp(b)-stateTimestamp(a))[0]||{};return {...clone(defaults),...parsed,settings:{...clone(defaults).settings,...(parsed.settings||{})}}}catch{return clone(defaults)}}
-function saveState(){const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);scheduleCloudSync()}
+function safePersistState(){
+  try{
+    const serialised=JSON.stringify(state);
+    localStorage.setItem(STORAGE_KEY,serialised);
+    try{localStorage.setItem(STORAGE_BACKUP_KEY,serialised)}catch(err){console.warn('ELDYN backup storage skipped',err)}
+    return true;
+  }catch(err){
+    console.warn('ELDYN local state storage failed; continuing with memory/cloud state',err);
+    try{localStorage.removeItem(STORAGE_BACKUP_KEY)}catch{}
+    try{
+      const serialised=JSON.stringify(state);
+      localStorage.setItem(STORAGE_KEY,serialised);
+      return true;
+    }catch(err2){
+      console.warn('ELDYN local storage still full',err2);
+      if(typeof syncStatus!=='undefined'&&syncStatus)syncStatus.textContent='Phone storage full · cloud save will continue';
+      return false;
+    }
+  }
+}
+function saveState(){safePersistState();scheduleCloudSync()}
 function markLogChanged(date=activeDate){const log=getLog(date);log.updatedAt=new Date().toISOString();saveState();return log}
 const PENDING_RUN_SYNC_KEY='eldyn-pending-run-sync-v1';
 function pendingRunSyncQueue(){try{return JSON.parse(localStorage.getItem(PENDING_RUN_SYNC_KEY)||'[]').filter(x=>x?.date&&x?.runId)}catch{return[]}}
-function queueRunSync(date,runId){const q=pendingRunSyncQueue().filter(x=>!(x.date===date&&String(x.runId)===String(runId)));q.push({date,runId,queuedAt:new Date().toISOString()});localStorage.setItem(PENDING_RUN_SYNC_KEY,JSON.stringify(q))}
-function clearRunSync(date,runId){const q=pendingRunSyncQueue().filter(x=>!(x.date===date&&String(x.runId)===String(runId)));if(q.length)localStorage.setItem(PENDING_RUN_SYNC_KEY,JSON.stringify(q));else localStorage.removeItem(PENDING_RUN_SYNC_KEY)}
+function queueRunSync(date,runId){const q=pendingRunSyncQueue().filter(x=>!(x.date===date&&String(x.runId)===String(runId)));q.push({date,runId,queuedAt:new Date().toISOString()});try{localStorage.setItem(PENDING_RUN_SYNC_KEY,JSON.stringify(q))}catch(err){console.warn('Run retry queue storage failed',err)}}
+function clearRunSync(date,runId){const q=pendingRunSyncQueue().filter(x=>!(x.date===date&&String(x.runId)===String(runId)));try{if(q.length)localStorage.setItem(PENDING_RUN_SYNC_KEY,JSON.stringify(q));else localStorage.removeItem(PENDING_RUN_SYNC_KEY)}catch(err){console.warn('Run retry queue cleanup failed',err)}}
 function runExistsInPayload(payload,runId){const p=parsePayload(payload);return (Array.isArray(p?.runs)?p.runs:[]).some(r=>String(r?.id)===String(runId))}
 async function saveRunRecordNow(date,runId,{attempts=3}={}){
   const local=state.logs?.[date],record=(Array.isArray(local?.runs)?local.runs:[]).find(r=>String(r?.id)===String(runId));
@@ -138,7 +158,7 @@ async function saveRunRecordNow(date,runId,{attempts=3}={}){
       if(saved&&runExistsInPayload(saved.payload,runId)){
         state.logs[date]=mergeDailyLog(state.logs[date]||{},saved.payload,saved.updated_at);
         restoreRunsFromDailyLogs();
-        const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
+        safePersistState();
         clearRunSync(date,runId);syncStatus.textContent='✓ Run synced to cloud';return true;
       }
     }catch(err){console.warn('Run cloud save attempt failed',attempt+1,err)}
@@ -148,7 +168,7 @@ async function saveRunRecordNow(date,runId,{attempts=3}={}){
 }
 async function flushPendingRunSyncs(){if(!supabaseClient||!currentUser)return false;const q=pendingRunSyncQueue();let all=true;for(const item of q){const ok=await saveRunRecordNow(item.date,item.runId,{attempts:2});all=all&&ok}return all}
 window.addEventListener('online',()=>{flushPendingRunSyncs().catch(()=>{})});
-async function saveDailyLogNow(date=activeDate,{verify=true}={}){if(!supabaseClient||!currentUser||!cloudHydrated)return false;const local=state.logs[date];if(!local||isFuturePlaceholder(date,local))return false;syncStatus.textContent='Saving meal…';for(let attempt=0;attempt<2;attempt++){const {data:remoteRows,error:readError}=await supabaseClient.from('daily_logs').select('payload,updated_at').eq('user_id',currentUser.id).eq('date',date).limit(1);if(readError)continue;const remote=remoteRows?.[0];const merged=mergeDailyLog(local,remote?.payload||{},remote?.updated_at);const {error}=await supabaseClient.from('daily_logs').upsert({user_id:currentUser.id,date,payload:merged,updated_at:merged.updatedAt},{onConflict:'user_id,date'});if(error)continue;state.logs[date]=merged;const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);if(!verify){syncStatus.textContent='Saved to cloud.';return true}const {data:check,error:checkError}=await supabaseClient.from('daily_logs').select('payload').eq('user_id',currentUser.id).eq('date',date).limit(1);const saved=parsePayload(check?.[0]?.payload);if(!checkError&&mealPlansEquivalent(merged.mealPlan,saved.mealPlan)){syncStatus.textContent='✓ Meal saved to cloud';return true}}syncStatus.textContent='Meal save pending — tap Sync';return false}
+async function saveDailyLogNow(date=activeDate,{verify=true}={}){if(!supabaseClient||!currentUser||!cloudHydrated)return false;const local=state.logs[date];if(!local||isFuturePlaceholder(date,local))return false;syncStatus.textContent='Saving meal…';for(let attempt=0;attempt<2;attempt++){const {data:remoteRows,error:readError}=await supabaseClient.from('daily_logs').select('payload,updated_at').eq('user_id',currentUser.id).eq('date',date).limit(1);if(readError)continue;const remote=remoteRows?.[0];const merged=mergeDailyLog(local,remote?.payload||{},remote?.updated_at);const {error}=await supabaseClient.from('daily_logs').upsert({user_id:currentUser.id,date,payload:merged,updated_at:merged.updatedAt},{onConflict:'user_id,date'});if(error)continue;state.logs[date]=merged;safePersistState();if(!verify){syncStatus.textContent='Saved to cloud.';return true}const {data:check,error:checkError}=await supabaseClient.from('daily_logs').select('payload').eq('user_id',currentUser.id).eq('date',date).limit(1);const saved=parsePayload(check?.[0]?.payload);if(!checkError&&mealPlansEquivalent(merged.mealPlan,saved.mealPlan)){syncStatus.textContent='✓ Meal saved to cloud';return true}}syncStatus.textContent='Meal save pending — tap Sync';return false}
 function mealPlansEquivalent(a,b){const clean=v=>(Array.isArray(v)?v:[]).map(m=>({key:m?.key||'',done:!!m?.done,customText:m?.customText||'',foodItems:(Array.isArray(m?.foodItems)?m.foodItems:[]).map(x=>({name:x?.name||'',amount:+x?.amount||0,unit:x?.unit||'',kcal:+x?.kcal||0,protein:+x?.protein||0,carbs:+x?.carbs||0,fat:+x?.fat||0}))}));return JSON.stringify(clean(a))===JSON.stringify(clean(b))}
 function plannedExercises(date){return clone(weeklyPlan[dateFromKey(date).getDay()].exercises).map(x=>({...x,id:x.id+'-'+date,done:false}))}
 function isLegacyDefaults(list=[]){const names=list.map(x=>x.name).join('|');return names==='Barbell Squat|Seated Cable Row|Easy Run'}
@@ -532,7 +552,7 @@ async function cloudSync(show=false){
   if(rows.length)({error}=await supabaseClient.from('daily_logs').upsert(rows,{onConflict:'user_id,date'}));
   if(!error&&futurePlaceholders.length)await supabaseClient.from('daily_logs').delete().eq('user_id',currentUser.id).in('date',futurePlaceholders);
   restoreRunsFromDailyLogs();
-  const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
+  safePersistState();
   syncStatus.textContent=error?'Sync failed: '+error.message:'Synced just now.';if(!error)await flushPendingRunSyncs();if(show)alert(error?error.message:'Sync complete.');
 }
 async function cloudPull(){
@@ -551,7 +571,7 @@ async function cloudPull(){
   if(futurePlaceholders.length)await supabaseClient.from('daily_logs').delete().eq('user_id',currentUser.id).in('date',futurePlaceholders);
   restoreRunsFromDailyLogs();
   activeDate=todayKey();selectedDate=todayKey();
-  const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
+  safePersistState();
   cloudHydrated=true;render();syncStatus.textContent=futurePlaceholders.length?'Cloud restored · future placeholder removed.':'Cloud data restored.';await flushPendingRunSyncs();
 }
 
@@ -592,10 +612,14 @@ function pointInBounds(x,y,b){return b&&x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h}
 function sharePointerPoint(e){const r=shareEls.canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*shareEls.canvas.width/r.width,y:(e.clientY-r.top)*shareEls.canvas.height/r.height}}
 const ACTIVE_RUN_KEY='eldyn-active-run-v5',LEGACY_ACTIVE_RUN_KEY='eldyn-active-run-v4';
 function saveActiveRun(reason='tick'){
-  if(!runSession){localStorage.removeItem(ACTIVE_RUN_KEY);localStorage.removeItem(LEGACY_ACTIVE_RUN_KEY);return}
-  const now=Date.now();runSession.lastPersistedAt=now;runSession.lastPersistReason=reason;
-  const snap={...runSession,savedAt:now};
-  localStorage.setItem(ACTIVE_RUN_KEY,JSON.stringify(snap));
+  try{
+    if(!runSession){localStorage.removeItem(ACTIVE_RUN_KEY);localStorage.removeItem(LEGACY_ACTIVE_RUN_KEY);return}
+    const now=Date.now();runSession.lastPersistedAt=now;runSession.lastPersistReason=reason;
+    const snap={...runSession,savedAt:now};
+    localStorage.setItem(ACTIVE_RUN_KEY,JSON.stringify(snap));
+  }catch(err){
+    console.warn('Active run local snapshot failed',err);
+  }
 }
 function restoreActiveRun(){
   try{
@@ -957,15 +981,15 @@ async function finishRun(){
       if(!log.exercises.some(x=>x.runRecordId===record.id))log.exercises.push({id:`gps-${record.id}`,runRecordId:record.id,name:activityName,sets:1,reps:Math.max(1,Math.round(record.durationMs/60000)),weight:0,target:'Cardio · Endurance',instructions:`${formatDistance(record.distanceKm)} · ${formatClock(record.durationMs)} · ${paceText(record.avgPaceSecKm)}/km`,youtube:'',search:'',done:true,gpsActivity:true});
       log.priorities.workout=true;log.updatedAt=new Date().toISOString();
 
-      // Local completion must never wait for the network. Reset/render first so the
-      // Finish button always feels immediate even when Supabase is slow or offline.
-      saveState();
-      restoreRunsFromDailyLogs();
-      const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
+      // Finalise the in-memory session first. Storage quota/network failures must never
+      // leave the UI stuck on the finished run or prevent Today from refreshing.
       const savedId=record.id;
       activeDate=runDate;selectedDate=runDate;
-      runSession=null;saveActiveRun();
+      runSession=null;saveActiveRun('finish-clear');
+      restoreRunsFromDailyLogs();
       renderRun();renderToday();renderProgress();renderCalendar();
+      safePersistState();
+      scheduleCloudSync();
       openShareCard(savedId);
 
       // Keep the UI immediate, but persist this exact run to Supabase and verify it by run ID.
