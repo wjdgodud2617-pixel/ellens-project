@@ -87,6 +87,13 @@ function yesterdayRecommendation(){const y=getLog(shiftDate(activeDate,-1)),name
 const defaults={runs:[],settings:{name:'Ellen',sex:'female',age:37,height:160,currentWeight:78,currentBodyFat:'',goalWeight:74.5,goalMode:'fatloss',activity:1.55,mealCount:4,theme:'performance',language:'ko',waterGoal:2500,sleepGoal:7.5,proteinGoal:125,calorieGoal:1650,carbGoal:165,fatGoal:55},logs:{},body:[],lastCelebrated:{}};
 const APP_TIME_ZONE='Asia/Seoul';
 let state=loadState(),runSession=null,runTimer=null,runWatchId=null,runWakeLock=null,activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null,cloudHydrated=false,lastFinishedRunPreview=null;
+const LAST_RUN_SNAPSHOT_KEY='eldyn-last-run-snapshot-v1';
+function saveLastRunSnapshot(run){if(!run)return;lastFinishedRunPreview=run;try{localStorage.setItem(LAST_RUN_SNAPSHOT_KEY,JSON.stringify(run))}catch(err){try{sessionStorage.setItem(LAST_RUN_SNAPSHOT_KEY,JSON.stringify(run))}catch{}}}
+function loadLastRunSnapshot(){for(const store of [localStorage,sessionStorage]){try{const raw=store.getItem(LAST_RUN_SNAPSHOT_KEY);if(raw){const r=JSON.parse(raw);if(r?.id)return r}}catch{}}return null}
+function allKnownRuns(){let runs=Array.isArray(state.runs)?state.runs:[];for(const log of Object.values(state.logs||{}))runs=mergeRuns(runs,log?.runs);const snap=lastFinishedRunPreview||loadLastRunSnapshot();if(snap)runs=mergeRuns(runs,[snap]);return runs}
+function findKnownRun(id){return allKnownRuns().find(r=>String(r?.id)===String(id))||null}
+function latestKnownRunForDate(date=todayKey()){return allKnownRuns().filter(r=>{const d=new Date(r?.endedAt||r?.startedAt||0);return !Number.isNaN(d.getTime())&&zonedDateKey(d)===date}).sort((a,b)=>Date.parse(b?.endedAt||0)-Date.parse(a?.endedAt||0))[0]||null}
+lastFinishedRunPreview=loadLastRunSnapshot();
 function zonedDateKey(value=new Date()){
   const parts=new Intl.DateTimeFormat('en-US',{timeZone:APP_TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(value);
   const pick=t=>parts.find(x=>x.type===t)?.value;
@@ -157,6 +164,7 @@ async function saveRunRecordNow(date,runId,{attempts=3}={}){
       const saved=check?.[0];
       if(saved&&runExistsInPayload(saved.payload,runId)){
         state.logs[date]=mergeDailyLog(state.logs[date]||{},saved.payload,saved.updated_at);
+        const verified=(state.logs[date].runs||[]).find(r=>String(r?.id)===String(runId));if(verified)saveLastRunSnapshot(verified);
         restoreRunsFromDailyLogs();
         safePersistState();
         clearRunSync(date,runId);syncStatus.textContent='✓ Run synced to cloud';return true;
@@ -249,7 +257,7 @@ function updateGreeting(){const h=new Date().getHours(),name=state.settings.name
 function applyTheme(theme){const value=['performance','core','paris'].includes(theme)?theme:'performance';document.documentElement.dataset.theme=value;const color=value==='paris'?'#f58fa3':value==='core'?'#ffffff':'#39ff14';document.querySelector('meta[name=theme-color]')?.setAttribute('content','#050605');}
 document.addEventListener('change',e=>{if(e.target.matches('input[name="eldynTheme"]')){state.settings.theme=e.target.value;applyTheme(e.target.value);saveState();renderShareCard?.()}});
 document.getElementById('languageSetting')?.addEventListener('change',e=>{state.settings.language=e.target.value;saveState();render()});
-function render(){applyTheme(state.settings.theme||'performance');applyLanguage(state.settings.language||'ko');updateGreeting();renderToday();renderPlan();renderCalendar();renderProgress();renderSettings()}
+function render(){restoreRunsFromDailyLogs();applyTheme(state.settings.theme||'performance');applyLanguage(state.settings.language||'ko');updateGreeting();renderToday();renderPlan();renderCalendar();renderProgress();renderSettings()}
 function renderPlan(){
   const grid=document.getElementById('weeklyPlanGrid');if(!grid)return;
   const today=new Date(),todayDay=today.getDay(),monday=new Date(today);monday.setDate(today.getDate()-((todayDay+6)%7));
@@ -259,9 +267,7 @@ function renderPlan(){
 function latestRunsForDashboard(){
   // Dashboard must not depend on only state.runs: a just-finished run is first written
   // into today's daily log and cloud hydration may refresh state.runs asynchronously.
-  let runs=Array.isArray(state.runs)?state.runs:[];
-  for(const log of Object.values(state.logs||{}))runs=mergeRuns(runs,log?.runs);
-  if(lastFinishedRunPreview)runs=mergeRuns(runs,[lastFinishedRunPreview]);
+  let runs=allKnownRuns();
   const today=todayKey(),yesterday=shiftDate(today,-1);
   return runs.slice().sort((a,b)=>Date.parse(b?.endedAt||0)-Date.parse(a?.endedAt||0)).filter(r=>{
     const ended=new Date(r?.endedAt||r?.startedAt||0);
@@ -279,7 +285,7 @@ function renderDashboardRunCard(){
     el.querySelector('[data-open-run-tab]')?.addEventListener('click',()=>switchView('run'));
   }else{
     el.innerHTML=runs.map(r=>{
-      const k=keyFromDate(new Date(r.endedAt)),label=k===todayKey()?(lang==='ko'?'오늘':'Today'):(lang==='ko'?'직전':'Previous');
+      const k=zonedDateKey(new Date(r.endedAt)),label=k===todayKey()?(lang==='ko'?'오늘':'Today'):(lang==='ko'?'직전':'Previous');
       const activity=r.activityType==='walk'?(lang==='ko'?'걷기':'Walk'):(lang==='ko'?'러닝':'Run');
       return `<div class="dashboard-run-item-wrap"><button class="dashboard-run-item" type="button" data-open-run-story="${r.id}"><span><small>${label}</small><b>${activity} ${formatDistance(r.distanceKm)}</b></span><span>${formatClock(r.durationMs)} · ${paceText(runAveragePace(r))}/km</span></button><button class="mini-edit dashboard-story-btn" type="button" data-open-run-story="${r.id}">${lang==='ko'?'인증샷 만들기':'Create story'}</button></div>`
     }).join('');
@@ -536,7 +542,7 @@ function mergeMealPlans(localPlan,remotePlan,preferLocal){
   })
 }
 function mergeRuns(localRuns,remoteRuns){const map=new Map();for(const run of [...(Array.isArray(remoteRuns)?remoteRuns:[]),...(Array.isArray(localRuns)?localRuns:[])]){const key=run?.id||`${run?.startedAt||''}-${run?.endedAt||''}-${run?.distanceKm||0}`;if(key)map.set(key,run)}return [...map.values()].sort((a,b)=>Date.parse(a?.startedAt||0)-Date.parse(b?.startedAt||0))}
-function restoreRunsFromDailyLogs(){let merged=Array.isArray(state.runs)?state.runs:[];for(const log of Object.values(state.logs||{}))merged=mergeRuns(merged,log?.runs);state.runs=merged}
+function restoreRunsFromDailyLogs(){let merged=Array.isArray(state.runs)?state.runs:[];for(const log of Object.values(state.logs||{}))merged=mergeRuns(merged,log?.runs);const snap=lastFinishedRunPreview||loadLastRunSnapshot();if(snap)merged=mergeRuns(merged,[snap]);state.runs=merged}
 function mergeDailyLog(localRaw,remoteRaw,remoteUpdatedAt){
   const local=parsePayload(localRaw),remote=parsePayload(remoteRaw),lt=Date.parse(local.updatedAt||0)||0,rt=Date.parse(remote.updatedAt||remoteUpdatedAt||0)||0,preferLocal=lt>=rt;
   const base=preferLocal?{...remote,...local}:{...local,...remote};
@@ -989,7 +995,7 @@ async function finishRun(){
         workoutDurationMs,avgPaceSecKm,avgSpeedKmh,averageDurationMs,calories:runCalories(distanceKm),splits:session.splits,
         movingDurationMs,topSpeedKmh:(session.topSpeedMps||0)*3.6,route:session.route||[],gpsEnabled:session.gpsEnabled,autoPauseEnabled:session.autoPauseEnabled};
       state.runs=state.runs||[];state.runs=mergeRuns(state.runs,[record]);
-      lastFinishedRunPreview=record;
+      saveLastRunSnapshot(record);
       const runDate=zonedDateKey(new Date(record.endedAt));const log=getLog(runDate);log.runs=mergeRuns(log.runs,[record]);
       const activityName=record.activityType==='walk'?'Walking':'Running';
       if(!log.exercises.some(x=>x.runRecordId===record.id))log.exercises.push({id:`gps-${record.id}`,runRecordId:record.id,name:activityName,sets:1,reps:Math.max(1,Math.round(record.durationMs/60000)),weight:0,target:'Cardio · Endurance',instructions:`${formatDistance(record.distanceKm)} · ${formatClock(record.durationMs)} · ${paceText(record.avgPaceSecKm)}/km`,youtube:'',search:'',done:true,gpsActivity:true});
@@ -1118,7 +1124,7 @@ function openShareCard(id){
     clearCtx.fillStyle='#071007';clearCtx.fillRect(0,0,shareEls.canvas.width,shareEls.canvas.height);
     clearCtx.restore();
   }
-  shareRunRecord=(state.runs||[]).find(r=>String(r.id)===String(id));
+  shareRunRecord=findKnownRun(id);
   if(!shareRunRecord){
     alert(state.settings.language==='ko'?'선택한 러닝 기록을 찾지 못했어요. 동기화 후 다시 시도해 주세요.':'The selected run could not be found. Sync and try again.');
     return;
