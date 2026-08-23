@@ -145,7 +145,21 @@ function queueRunSync(date,runId){const q=pendingRunSyncQueue().filter(x=>!(x.da
 function clearRunSync(date,runId){const q=pendingRunSyncQueue().filter(x=>!(x.date===date&&String(x.runId)===String(runId)));try{if(q.length)localStorage.setItem(PENDING_RUN_SYNC_KEY,JSON.stringify(q));else localStorage.removeItem(PENDING_RUN_SYNC_KEY)}catch(err){console.warn('Run retry queue cleanup failed',err)}}
 function runExistsInPayload(payload,runId){const p=parsePayload(payload);return (Array.isArray(p?.runs)?p.runs:[]).some(r=>String(r?.id)===String(runId))}
 async function saveRunRecordNow(date,runId,{attempts=3}={}){
-  const local=state.logs?.[date],record=(Array.isArray(local?.runs)?local.runs:[]).find(r=>String(r?.id)===String(runId));
+  // A finished run may survive in the last-run snapshot/state.runs even when
+  // localStorage quota or an older cloud payload left state.logs[date].runs empty.
+  // Recover the exact run by ID before attempting the Supabase write.
+  let local=state.logs?.[date];
+  let record=(Array.isArray(local?.runs)?local.runs:[]).find(r=>String(r?.id)===String(runId));
+  if(!record){
+    record=allKnownRuns().find(r=>String(r?.id)===String(runId));
+    if(record){
+      local=state.logs?.[date]||getLog(date);
+      local.runs=mergeRuns(local.runs,[record]);
+      local.updatedAt=new Date().toISOString();
+      state.runs=mergeRuns(state.runs,[record]);
+      safePersistState();
+    }
+  }
   if(!local||!record){clearRunSync(date,runId);return false}
   if(!supabaseClient||!currentUser){queueRunSync(date,runId);return false}
   queueRunSync(date,runId);syncStatus.textContent='Saving run to cloud…';
@@ -175,7 +189,25 @@ async function saveRunRecordNow(date,runId,{attempts=3}={}){
   queueRunSync(date,runId);syncStatus.textContent='Run saved on this phone · cloud retry pending';return false;
 }
 async function flushPendingRunSyncs(){if(!supabaseClient||!currentUser)return false;const q=pendingRunSyncQueue();let all=true;for(const item of q){const ok=await saveRunRecordNow(item.date,item.runId,{attempts:2});all=all&&ok}return all}
-window.addEventListener('online',()=>{flushPendingRunSyncs().catch(()=>{})});
+function latestRecoverableLocalRun(){
+  const runs=allKnownRuns().filter(r=>r?.id&&r?.endedAt);
+  return runs.sort((a,b)=>Date.parse(b.endedAt||0)-Date.parse(a.endedAt||0))[0]||null;
+}
+async function recoverLatestLocalRunToCloud(){
+  if(!supabaseClient||!currentUser)return false;
+  const record=latestRecoverableLocalRun();
+  if(!record)return false;
+  const date=zonedDateKey(new Date(record.endedAt));
+  const log=state.logs?.[date]||getLog(date);
+  if(!(log.runs||[]).some(r=>String(r?.id)===String(record.id))){
+    log.runs=mergeRuns(log.runs,[record]);
+    log.updatedAt=new Date().toISOString();
+    state.runs=mergeRuns(state.runs,[record]);
+    safePersistState();
+  }
+  return saveRunRecordNow(date,record.id,{attempts:3});
+}
+window.addEventListener('online',()=>{recoverLatestLocalRunToCloud().then(()=>flushPendingRunSyncs()).catch(()=>{})});
 async function saveDailyLogNow(date=activeDate,{verify=true}={}){if(!supabaseClient||!currentUser||!cloudHydrated)return false;const local=state.logs[date];if(!local||isFuturePlaceholder(date,local))return false;syncStatus.textContent='Saving meal…';for(let attempt=0;attempt<2;attempt++){const {data:remoteRows,error:readError}=await supabaseClient.from('daily_logs').select('payload,updated_at').eq('user_id',currentUser.id).eq('date',date).limit(1);if(readError)continue;const remote=remoteRows?.[0];const merged=mergeDailyLog(local,remote?.payload||{},remote?.updated_at);const {error}=await supabaseClient.from('daily_logs').upsert({user_id:currentUser.id,date,payload:merged,updated_at:merged.updatedAt},{onConflict:'user_id,date'});if(error)continue;state.logs[date]=merged;safePersistState();if(!verify){syncStatus.textContent='Saved to cloud.';return true}const {data:check,error:checkError}=await supabaseClient.from('daily_logs').select('payload').eq('user_id',currentUser.id).eq('date',date).limit(1);const saved=parsePayload(check?.[0]?.payload);if(!checkError&&mealPlansEquivalent(merged.mealPlan,saved.mealPlan)){syncStatus.textContent='✓ Meal saved to cloud';return true}}syncStatus.textContent='Meal save pending — tap Sync';return false}
 function mealPlansEquivalent(a,b){const clean=v=>(Array.isArray(v)?v:[]).map(m=>({key:m?.key||'',done:!!m?.done,customText:m?.customText||'',foodItems:(Array.isArray(m?.foodItems)?m.foodItems:[]).map(x=>({name:x?.name||'',amount:+x?.amount||0,unit:x?.unit||'',kcal:+x?.kcal||0,protein:+x?.protein||0,carbs:+x?.carbs||0,fat:+x?.fat||0}))}));return JSON.stringify(clean(a))===JSON.stringify(clean(b))}
 function plannedExercises(date){return clone(weeklyPlan[dateFromKey(date).getDay()].exercises).map(x=>({...x,id:x.id+'-'+date,done:false}))}
@@ -512,7 +544,7 @@ mealPlanList.onclick=e=>{const c=e.target.closest('[data-meal-change]'),d=e.targ
 saveSettingsBtn.onclick=()=>{const theme=document.querySelector('input[name="eldynTheme"]:checked')?.value||'performance';Object.assign(state.settings,{theme,language:document.getElementById('languageSetting')?.value||'ko',waterGoal:+waterGoal.value||2000,sleepGoal:+sleepGoal.value||7.5,proteinGoal:+proteinGoal.value||120,calorieGoal:+calorieGoal.value||1800});applyTheme(theme);saveState();render();alert(state.settings.language==='en'?'Settings saved.':'설정을 저장했어요.')};saveBodyBtn.onclick=()=>{state.body=state.body.filter(x=>x.date!==todayKey());state.body.push({date:todayKey(),weight:+weightInput.value||null,bodyFat:+bodyFatInput.value||null,waist:+waistInput.value||null,muscle:+muscleInput.value||null});saveState();alert('Body record saved.')};exportBtn.onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`eldyn-backup-${todayKey()}.json`;a.click();URL.revokeObjectURL(a.href)};importInput.onchange=async e=>{try{state={...clone(defaults),...JSON.parse(await e.target.files[0].text())};saveState();render();alert('Backup imported.')}catch{alert('That backup file could not be read.')}};celebrationClose.onclick=()=>celebrationDialog.close();profileBtn.onclick=()=>accountDialog.showModal();
 async function initSupabase(){const c=window.ELLEN_CONFIG||{},badge=document.getElementById('connectionBadge');if(!c.SUPABASE_URL||!c.SUPABASE_ANON_KEY){syncNowBtn.disabled=true;syncStatus.textContent='Supabase configuration is missing.';return}if(!window.supabase){syncStatus.textContent='Internet connection required.';return}try{supabaseClient=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const{data,error}=await supabaseClient.auth.getSession();if(error)throw error;setUser(data.session?.user||null);supabaseClient.auth.onAuthStateChange((_e,s)=>setUser(s?.user||null))}catch(e){syncStatus.textContent='Cloud connection failed: '+e.message}}
 function setUser(user){currentUser=user;cloudHydrated=false;authTitle.textContent=user?user.email:'Cloud ready';syncStatus.textContent=user?'Loading cloud data…':'Supabase is connected. Create an account or sign in.';authFields.hidden=!!user;signOutBtn.hidden=!user;syncNowBtn.disabled=!user;if(user)cloudPull();}
-signInBtn.onclick=()=>authAction('signin');signUpBtn.onclick=()=>authAction('signup');signOutBtn.onclick=async()=>{await supabaseClient?.auth.signOut();setUser(null)};syncNowBtn.onclick=()=>cloudSync(true);async function authAction(mode){if(!supabaseClient)return alert('Cloud connection is not ready.');const email=emailInput.value.trim(),password=passwordInput.value;if(!email||password.length<6)return alert('Enter an email and a password with at least 6 characters.');const fn=mode==='signup'?'signUp':'signInWithPassword',r=await supabaseClient.auth[fn]({email,password});if(r.error)alert(r.error.message);else alert(mode==='signup'?'Account created. You can sign in now if email confirmation is disabled.':'Signed in. Cloud sync is active.')}
+signInBtn.onclick=()=>authAction('signin');signUpBtn.onclick=()=>authAction('signup');signOutBtn.onclick=async()=>{await supabaseClient?.auth.signOut();setUser(null)};syncNowBtn.onclick=async()=>{await recoverLatestLocalRunToCloud();await cloudSync(true)};async function authAction(mode){if(!supabaseClient)return alert('Cloud connection is not ready.');const email=emailInput.value.trim(),password=passwordInput.value;if(!email||password.length<6)return alert('Enter an email and a password with at least 6 characters.');const fn=mode==='signup'?'signUp':'signInWithPassword',r=await supabaseClient.auth[fn]({email,password});if(r.error)alert(r.error.message);else alert(mode==='signup'?'Account created. You can sign in now if email confirmation is disabled.':'Signed in. Cloud sync is active.')}
 function parsePayload(payload){if(!payload)return{};if(typeof payload==='string'){try{return JSON.parse(payload)}catch{return{}}}return payload}
 function mealHasUserData(meal){return !!(String(meal?.customText||'').trim()||(Array.isArray(meal?.foodItems)&&meal.foodItems.length)||mealHasNutritionLog(meal))}
 function mealHasFoodItems(meal){return Array.isArray(meal?.foodItems)&&meal.foodItems.length>0}
@@ -591,7 +623,12 @@ async function cloudPull(){
   restoreRunsFromDailyLogs();
   activeDate=todayKey();selectedDate=todayKey();
   safePersistState();
-  cloudHydrated=true;render();syncStatus.textContent=futurePlaceholders.length?'Cloud restored · future placeholder removed.':'Cloud data restored.';await flushPendingRunSyncs();
+  cloudHydrated=true;render();syncStatus.textContent=futurePlaceholders.length?'Cloud restored · future placeholder removed.':'Cloud data restored.';
+  // Rescue a run that finished on this phone but never reached daily_logs.runs.
+  // This is intentionally after cloud hydration so the existing meal/water payload is preserved.
+  await recoverLatestLocalRunToCloud();
+  await flushPendingRunSyncs();
+  restoreRunsFromDailyLogs();render();
 }
 
 
