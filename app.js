@@ -208,6 +208,15 @@ function safePersistState(){
 function saveState(){safePersistState();scheduleCloudSync()}
 function markLogChanged(date=activeDate){const log=getLog(date);log.updatedAt=new Date().toISOString();saveState();return log}
 const PENDING_RUN_SYNC_KEY='eldyn-pending-run-sync-v1';
+// v1.2.22.19 — durable run vault. A completed RUN/WALK is written to IndexedDB
+// before the live session is cleared or any cloud pull is allowed to merge data.
+// This vault is intentionally independent from the large app state/localStorage.
+const RUN_VAULT_DB='eldyn-run-vault-v1',RUN_VAULT_STORE='runs';
+function openRunVaultDb(){return new Promise((resolve,reject)=>{try{const req=indexedDB.open(RUN_VAULT_DB,1);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(RUN_VAULT_STORE))db.createObjectStore(RUN_VAULT_STORE,{keyPath:'id'})};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)}catch(err){reject(err)}})}
+async function vaultPutRun(record){if(!record?.id)return false;try{const db=await openRunVaultDb();await new Promise((resolve,reject)=>{const tx=db.transaction(RUN_VAULT_STORE,'readwrite');tx.objectStore(RUN_VAULT_STORE).put({...record,_vaultSavedAt:new Date().toISOString()});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)});db.close();return true}catch(err){console.warn('Run vault write failed',err);try{localStorage.setItem('eldyn-run-emergency-'+record.id,JSON.stringify(record));return true}catch{return false}}}
+async function vaultGetRun(runId){if(!runId)return null;try{const db=await openRunVaultDb();const value=await new Promise((resolve,reject)=>{const tx=db.transaction(RUN_VAULT_STORE,'readonly');const req=tx.objectStore(RUN_VAULT_STORE).get(runId);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)});db.close();if(value)return value}catch(err){console.warn('Run vault read failed',err)}try{return JSON.parse(localStorage.getItem('eldyn-run-emergency-'+runId)||'null')}catch{return null}}
+async function vaultAllRuns(){let out=[];try{const db=await openRunVaultDb();out=await new Promise((resolve,reject)=>{const tx=db.transaction(RUN_VAULT_STORE,'readonly');const req=tx.objectStore(RUN_VAULT_STORE).getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error)});db.close()}catch(err){console.warn('Run vault list failed',err)}try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k?.startsWith('eldyn-run-emergency-'))continue;const r=JSON.parse(localStorage.getItem(k)||'null');if(r?.id&&!out.some(x=>String(x.id)===String(r.id)))out.push(r)}}catch{}return out}
+async function restoreRunVaultIntoState(){const vault=await vaultAllRuns();if(!vault.length)return 0;let restored=0;for(const record of vault){if(!record?.id||!record?.endedAt)continue;const date=zonedDateKey(new Date(record.endedAt));const log=state.logs?.[date]||getLog(date);const had=(log.runs||[]).some(r=>String(r?.id)===String(record.id));log.runs=mergeRuns(log.runs,[record]);state.runs=mergeRuns(state.runs,[record]);if(!had)restored++}if(restored)safePersistState();return restored}
 function pendingRunSyncQueue(){try{return JSON.parse(localStorage.getItem(PENDING_RUN_SYNC_KEY)||'[]').filter(x=>x?.date&&x?.runId)}catch{return[]}}
 function queueRunSync(date,runId){const q=pendingRunSyncQueue().filter(x=>!(x.date===date&&String(x.runId)===String(runId)));q.push({date,runId,queuedAt:new Date().toISOString()});try{localStorage.setItem(PENDING_RUN_SYNC_KEY,JSON.stringify(q))}catch(err){console.warn('Run retry queue storage failed',err)}}
 function clearRunSync(date,runId){const q=pendingRunSyncQueue().filter(x=>!(x.date===date&&String(x.runId)===String(runId)));try{if(q.length)localStorage.setItem(PENDING_RUN_SYNC_KEY,JSON.stringify(q));else localStorage.removeItem(PENDING_RUN_SYNC_KEY)}catch(err){console.warn('Run retry queue cleanup failed',err)}}
@@ -219,7 +228,7 @@ async function saveRunRecordNow(date,runId,{attempts=3}={}){
   let local=state.logs?.[date];
   let record=(Array.isArray(local?.runs)?local.runs:[]).find(r=>String(r?.id)===String(runId));
   if(!record){
-    record=allKnownRuns().find(r=>String(r?.id)===String(runId));
+    record=allKnownRuns().find(r=>String(r?.id)===String(runId))||await vaultGetRun(runId);
     if(record){
       local=state.logs?.[date]||getLog(date);
       local.runs=mergeRuns(local.runs,[record]);
@@ -275,7 +284,7 @@ async function recoverLatestLocalRunToCloud(){
   }
   return saveRunRecordNow(date,record.id,{attempts:3});
 }
-window.addEventListener('online',()=>{recoverLatestLocalRunToCloud().then(()=>flushPendingRunSyncs()).catch(()=>{})});
+window.addEventListener('online',()=>{restoreRunVaultIntoState().then(()=>recoverLatestLocalRunToCloud()).then(()=>flushPendingRunSyncs()).catch(()=>{})});
 async function saveDailyLogNow(date=activeDate,{verify=true}={}){if(!supabaseClient||!currentUser||!cloudHydrated)return false;const local=state.logs[date];if(!local||isFuturePlaceholder(date,local))return false;syncStatus.textContent='Saving meal…';for(let attempt=0;attempt<2;attempt++){const {data:remoteRows,error:readError}=await supabaseClient.from('daily_logs').select('payload,updated_at').eq('user_id',currentUser.id).eq('date',date).limit(1);if(readError)continue;const remote=remoteRows?.[0];const merged=mergeDailyLog(local,remote?.payload||{},remote?.updated_at);const {error}=await supabaseClient.from('daily_logs').upsert({user_id:currentUser.id,date,payload:merged,updated_at:merged.updatedAt},{onConflict:'user_id,date'});if(error)continue;state.logs[date]=merged;safePersistState();if(!verify){syncStatus.textContent='Saved to cloud.';return true}const {data:check,error:checkError}=await supabaseClient.from('daily_logs').select('payload').eq('user_id',currentUser.id).eq('date',date).limit(1);const saved=parsePayload(check?.[0]?.payload);if(!checkError&&mealPlansEquivalent(merged.mealPlan,saved.mealPlan)){syncStatus.textContent='✓ Meal saved to cloud';return true}}syncStatus.textContent='Meal save pending — tap Sync';return false}
 function mealPlansEquivalent(a,b){const clean=v=>(Array.isArray(v)?v:[]).map(m=>({key:m?.key||'',done:!!m?.done,customText:m?.customText||'',foodItems:(Array.isArray(m?.foodItems)?m.foodItems:[]).map(x=>({name:x?.name||'',amount:+x?.amount||0,unit:x?.unit||'',kcal:+x?.kcal||0,protein:+x?.protein||0,carbs:+x?.carbs||0,fat:+x?.fat||0}))}));return JSON.stringify(clean(a))===JSON.stringify(clean(b))}
 function plannedExercises(date){return clone(weeklyPlan[dateFromKey(date).getDay()].exercises).map(x=>({...x,id:x.id+'-'+date,done:false}))}
@@ -676,6 +685,9 @@ async function cloudSync(show=false){
 }
 async function cloudPull(){
   if(!supabaseClient||!currentUser)return;
+  // Restore durable phone-side run records BEFORE remote rows are merged.
+  // A cloud payload with runs:[] must never erase a completed run that is still in the vault.
+  await restoreRunVaultIntoState();
   syncStatus.textContent='Loading cloud data…';
   const{data,error}=await supabaseClient.from('daily_logs').select('date,payload,updated_at').eq('user_id',currentUser.id);
   if(error){syncStatus.textContent='Could not load cloud data.';return}
@@ -688,6 +700,7 @@ async function cloudPull(){
   }
   for(const date of Object.keys(state.logs))if(isFuturePlaceholder(date,state.logs[date]))delete state.logs[date];
   if(futurePlaceholders.length)await supabaseClient.from('daily_logs').delete().eq('user_id',currentUser.id).in('date',futurePlaceholders);
+  await restoreRunVaultIntoState();
   restoreRunsFromDailyLogs();
   activeDate=todayKey();selectedDate=todayKey();
   safePersistState();
@@ -1099,6 +1112,9 @@ async function finishRun(){
       const record={id:crypto.randomUUID(),activityType:session.activityType||'run',startedAt:session.startedAt,endedAt:new Date().toISOString(),durationMs,distanceKm,
         workoutDurationMs,avgPaceSecKm,avgSpeedKmh,averageDurationMs,calories:runCalories(distanceKm),splits:session.splits,
         movingDurationMs,topSpeedKmh:(session.topSpeedMps||0)*3.6,route:session.route||[],gpsEnabled:session.gpsEnabled,autoPauseEnabled:session.autoPauseEnabled};
+      // FIRST WRITE: durable vault. Do not clear the live session until this independent backup exists.
+      const vaulted=await vaultPutRun(record);
+      if(!vaulted){console.warn('Completed run could not be vaulted; keeping normal save path active')}
       state.runs=state.runs||[];state.runs=mergeRuns(state.runs,[record]);
       saveLastRunSnapshot(record);
       const runDate=zonedDateKey(new Date(record.endedAt));const log=getLog(runDate);log.runs=mergeRuns(log.runs,[record]);
