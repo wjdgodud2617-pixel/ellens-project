@@ -890,8 +890,9 @@ function togglePause(){
   else{runSession.status='running';runSession.segmentStartedAt=Date.now();runSession.movingSegmentAt=Date.now();if(runSession.gpsEnabled)startGps();requestWakeLock();showRunCompanionNotification(true);saveActiveRun()}
   renderRun()
 }
+let finishRunInProgress=false;
 async function finishRun(){
-  if(!runSession)return;
+  if(!runSession||finishRunInProgress)return;
   const durationMs=elapsedMs(),movingDurationMs=movingMs();let distanceKm=runSession.distanceM/1000;
   if(durationMs<10000&&!confirm('This run is under 10 seconds. Finish without saving?'))return;
   if(!runSession.gpsEnabled){
@@ -899,39 +900,47 @@ async function finishRun(){
     if(manual===null)return;
     distanceKm=Math.max(0,Number(String(manual).replace(',','.'))||0);
   }
+  finishRunInProgress=true;
+  if(runModeEls.finish){runModeEls.finish.disabled=true;runModeEls.finish.textContent=state.settings.language==='ko'?'저장 중…':'Saving…'}
+  if(runEls.finish){runEls.finish.disabled=true}
+  const session=runSession;
   stopGps();releaseWakeLock();clearRunCompanionNotification();clearInterval(runTimer);runTimer=null;exitRunMode();
-  if(distanceKm>=.02){
-    const session=runSession;
-    // Final pace/speed must come from one source of truth: workout duration ÷ final distance.
-    // Do not average split paces and do not swap to movingMs when Auto Pause is enabled.
-    const workoutDurationMs=durationMs;
-    const averageDurationMs=workoutDurationMs;
-    const avgPaceSecKm=(workoutDurationMs/1000)/distanceKm;
-    const avgSpeedKmh=distanceKm/(workoutDurationMs/3600000);
-    const record={id:crypto.randomUUID(),activityType:session.activityType||'run',startedAt:session.startedAt,endedAt:new Date().toISOString(),durationMs,distanceKm,
-      workoutDurationMs,avgPaceSecKm,avgSpeedKmh,averageDurationMs,calories:runCalories(distanceKm),splits:session.splits,
-      movingDurationMs,topSpeedKmh:(session.topSpeedMps||0)*3.6,route:session.route||[],gpsEnabled:session.gpsEnabled,autoPauseEnabled:session.autoPauseEnabled};
-    state.runs=state.runs||[];state.runs=mergeRuns(state.runs,[record]);
-    const runDate=todayKey();const log=getLog(runDate);log.runs=mergeRuns(log.runs,[record]);
-    const activityName=record.activityType==='walk'?'Walking':'Running';
-    if(!log.exercises.some(x=>x.runRecordId===record.id))log.exercises.push({id:`gps-${record.id}`,runRecordId:record.id,name:activityName,sets:1,reps:Math.max(1,Math.round(record.durationMs/60000)),weight:0,target:'Cardio · Endurance',instructions:`${formatDistance(record.distanceKm)} · ${formatClock(record.durationMs)} · ${paceText(record.avgPaceSecKm)}/km`,youtube:'',search:'',done:true,gpsActivity:true});
-    log.priorities.workout=true;log.updatedAt=new Date().toISOString();
+  try{
+    if(distanceKm>=.02){
+      // Final pace/speed must come from one source of truth: workout duration ÷ final distance.
+      const workoutDurationMs=durationMs;
+      const averageDurationMs=workoutDurationMs;
+      const avgPaceSecKm=(workoutDurationMs/1000)/distanceKm;
+      const avgSpeedKmh=distanceKm/(workoutDurationMs/3600000);
+      const record={id:crypto.randomUUID(),activityType:session.activityType||'run',startedAt:session.startedAt,endedAt:new Date().toISOString(),durationMs,distanceKm,
+        workoutDurationMs,avgPaceSecKm,avgSpeedKmh,averageDurationMs,calories:runCalories(distanceKm),splits:session.splits,
+        movingDurationMs,topSpeedKmh:(session.topSpeedMps||0)*3.6,route:session.route||[],gpsEnabled:session.gpsEnabled,autoPauseEnabled:session.autoPauseEnabled};
+      state.runs=state.runs||[];state.runs=mergeRuns(state.runs,[record]);
+      const runDate=todayKey();const log=getLog(runDate);log.runs=mergeRuns(log.runs,[record]);
+      const activityName=record.activityType==='walk'?'Walking':'Running';
+      if(!log.exercises.some(x=>x.runRecordId===record.id))log.exercises.push({id:`gps-${record.id}`,runRecordId:record.id,name:activityName,sets:1,reps:Math.max(1,Math.round(record.durationMs/60000)),weight:0,target:'Cardio · Endurance',instructions:`${formatDistance(record.distanceKm)} · ${formatClock(record.durationMs)} · ${paceText(record.avgPaceSecKm)}/km`,youtube:'',search:'',done:true,gpsActivity:true});
+      log.priorities.workout=true;log.updatedAt=new Date().toISOString();
 
-    // Persist the completed record before resetting the live session. This prevents
-    // the Run/Today UI from briefly rendering the cleared 0-state and removes the
-    // 500ms cloud-sync race that previously delayed the dashboard refresh.
-    saveState();
-    clearTimeout(syncTimer);
-    try{await saveDailyLogNow(runDate,{verify:false})}catch{}
-    restoreRunsFromDailyLogs();
-    const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
+      // Local completion must never wait for the network. Reset/render first so the
+      // Finish button always feels immediate even when Supabase is slow or offline.
+      saveState();
+      restoreRunsFromDailyLogs();
+      const serialised=JSON.stringify(state);localStorage.setItem(STORAGE_KEY,serialised);localStorage.setItem(STORAGE_BACKUP_KEY,serialised);
+      const savedId=record.id;
+      runSession=null;saveActiveRun();
+      renderRun();renderToday();renderProgress();renderCalendar();
+      openShareCard(savedId);
 
-    const savedId=record.id;
-    runSession=null;saveActiveRun();
-    renderRun();renderToday();renderProgress();renderCalendar();
-    scheduleCloudSync();
-    openShareCard(savedId)
-  } else {runSession=null;saveActiveRun();renderRun()}
+      clearTimeout(syncTimer);
+      saveDailyLogNow(runDate,{verify:false}).catch(()=>{}).finally(()=>scheduleCloudSync());
+    }else{
+      runSession=null;saveActiveRun();renderRun();
+    }
+  }finally{
+    finishRunInProgress=false;
+    if(runModeEls.finish){runModeEls.finish.disabled=false;runModeEls.finish.textContent=state.settings.language==='ko'?'■ 종료':'■ Finish'}
+    if(runEls.finish){runEls.finish.disabled=false}
+  }
 }
 function coverImage(ctx,img,w,h){const zoom=Math.max(1,sharePhotoTransform.zoom||1),scale=Math.max(w/img.width,h/img.height)*zoom,sw=w/scale,sh=h/scale,maxX=Math.max(0,(img.width-sw)/2),maxY=Math.max(0,(img.height-sh)/2),sx=Math.max(0,Math.min(img.width-sw,(img.width-sw)/2-(sharePhotoTransform.x||0)*maxX)),sy=Math.max(0,Math.min(img.height-sh,(img.height-sh)/2-(sharePhotoTransform.y||0)*maxY));ctx.drawImage(img,sx,sy,sw,sh,0,0,w,h)}
 function mercatorWorld(lat,lon,zoom){
@@ -1203,7 +1212,11 @@ runEls.start.onclick=beginRun;runEls.pause.onclick=togglePause;runEls.finish.onc
   }
   renderRun();
 });
-runModeEls.pause?.addEventListener('click',()=>{togglePause();renderRunMode()});runModeEls.finish?.addEventListener('click',finishRun);runModeEls.exit?.addEventListener('click',exitRunMode);runModeEls.lock?.addEventListener('click',()=>setRunModeLocked(true));
+runModeEls.pause?.addEventListener('click',()=>{togglePause();renderRunMode()});
+let lastFinishPointerAt=0;
+runModeEls.finish?.addEventListener('pointerup',(e)=>{lastFinishPointerAt=Date.now();e.preventDefault();e.stopPropagation();finishRun()},{passive:false});
+runModeEls.finish?.addEventListener('click',(e)=>{if(Date.now()-lastFinishPointerAt<700)return;e.preventDefault();e.stopPropagation();finishRun()});
+runModeEls.exit?.addEventListener('click',exitRunMode);runModeEls.lock?.addEventListener('click',()=>setRunModeLocked(true));
 runModeEls.unlock?.addEventListener('pointerdown',()=>{clearTimeout(runModeUnlockTimer);runModeUnlockTimer=setTimeout(()=>setRunModeLocked(false),2000)});['pointerup','pointercancel','pointerleave'].forEach(ev=>runModeEls.unlock?.addEventListener(ev,()=>clearTimeout(runModeUnlockTimer)));
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){
