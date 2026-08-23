@@ -86,7 +86,7 @@ function workoutPlanByKey(key){const [category,plan]=String(key||'').split(':');
 function yesterdayRecommendation(){const y=getLog(shiftDate(activeDate,-1)),name=(y.planName||'').toLowerCase();if(name.includes('hyrox')||name.includes('interval')||name.includes('metcon'))return 'recovery:mobility';if(name.includes('lower'))return 'strength:upper';if(name.includes('upper'))return 'cardio:indoorBike';return 'strength:fullbody'}
 const defaults={runs:[],settings:{name:'Ellen',sex:'female',age:37,height:160,currentWeight:78,currentBodyFat:'',goalWeight:74.5,goalMode:'fatloss',activity:1.55,mealCount:4,theme:'performance',language:'ko',waterGoal:2500,sleepGoal:7.5,proteinGoal:125,calorieGoal:1650,carbGoal:165,fatGoal:55},logs:{},body:[],lastCelebrated:{}};
 const APP_TIME_ZONE='Asia/Seoul';
-let state=loadState(),runSession=null,runTimer=null,runWatchId=null,runWakeLock=null,activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null,cloudHydrated=false;
+let state=loadState(),runSession=null,runTimer=null,runWatchId=null,runWakeLock=null,activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null,cloudHydrated=false,lastFinishedRunPreview=null;
 function zonedDateKey(value=new Date()){
   const parts=new Intl.DateTimeFormat('en-US',{timeZone:APP_TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(value);
   const pick=t=>parts.find(x=>x.type===t)?.value;
@@ -256,7 +256,7 @@ function renderPlan(){
   const order=[1,2,3,4,5,6,0],names=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   grid.innerHTML=order.map((day,idx)=>{const dt=new Date(monday);dt.setDate(monday.getDate()+idx);const key=keyFromDate(dt),plan=weeklyPlan[day],isToday=key===todayKey();return `<article class="plan-day-card ${isToday?'today-plan':''}"><div class="plan-day-head"><div><p class="eyebrow">${isToday?'TODAY':names[day].toUpperCase()}</p><h3>${escapeHtml(localizeWorkoutName(plan.name))}</h3><p class="muted">${new Intl.DateTimeFormat('en',{month:'short',day:'numeric'}).format(dt)}</p></div><span class="routine-count">${plan.exercises.length} ${state.settings.language==='ko'?'개 운동':'EXERCISES'}</span></div><div class="plan-exercises">${plan.exercises.map(x=>`<span class="plan-chip">${escapeHtml(localizeWorkoutName(x.name))}</span>`).join('')}</div><button class="secondary-btn plan-open-btn" data-open-plan-date="${key}">${state.settings.language==='ko'?'열기·수정':'Open & customise'}</button></article>`}).join('');
 }
-function latestRunsForDashboard(){const runs=(state.runs||[]).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));const today=todayKey(),yesterday=shiftDate(today,-1);return runs.filter(r=>{const k=keyFromDate(new Date(r.endedAt));return k===today||k===yesterday}).slice(0,2)}
+function latestRunsForDashboard(){const base=Array.isArray(state.runs)?state.runs:[];const runs=mergeRuns(base,lastFinishedRunPreview?[lastFinishedRunPreview]:[]).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));const today=todayKey(),yesterday=shiftDate(today,-1);return runs.filter(r=>{const k=keyFromDate(new Date(r.endedAt));return k===today||k===yesterday}).slice(0,2)}
 function renderDashboardRunCard(){
   const el=document.getElementById('dashboardRunCard');
   if(!el)return;
@@ -976,6 +976,7 @@ async function finishRun(){
         workoutDurationMs,avgPaceSecKm,avgSpeedKmh,averageDurationMs,calories:runCalories(distanceKm),splits:session.splits,
         movingDurationMs,topSpeedKmh:(session.topSpeedMps||0)*3.6,route:session.route||[],gpsEnabled:session.gpsEnabled,autoPauseEnabled:session.autoPauseEnabled};
       state.runs=state.runs||[];state.runs=mergeRuns(state.runs,[record]);
+      lastFinishedRunPreview=record;
       const runDate=todayKey();const log=getLog(runDate);log.runs=mergeRuns(log.runs,[record]);
       const activityName=record.activityType==='walk'?'Walking':'Running';
       if(!log.exercises.some(x=>x.runRecordId===record.id))log.exercises.push({id:`gps-${record.id}`,runRecordId:record.id,name:activityName,sets:1,reps:Math.max(1,Math.round(record.durationMs/60000)),weight:0,target:'Cardio · Endurance',instructions:`${formatDistance(record.distanceKm)} · ${formatClock(record.durationMs)} · ${paceText(record.avgPaceSecKm)}/km`,youtube:'',search:'',done:true,gpsActivity:true});
