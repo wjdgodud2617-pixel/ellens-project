@@ -413,7 +413,7 @@ function showCelebration(s){const m=mood(s);celebrationContent.innerHTML=`<div c
 function confetti(){for(let i=0;i<28;i++){const el=document.createElement('i');el.className='confetti';el.style.left=Math.random()*100+'vw';el.style.setProperty('--x',(Math.random()*180-90)+'px');el.style.animationDelay=Math.random()*.5+'s';document.body.appendChild(el);setTimeout(()=>el.remove(),2400)}}
 function renderCalendar(){const y=calendarCursor.getFullYear(),m=calendarCursor.getMonth();monthTitle.textContent=new Intl.DateTimeFormat('en',{month:'long',year:'numeric'}).format(calendarCursor);const first=new Date(y,m,1),days=new Date(y,m+1,0).getDate();let html='';for(let i=0;i<first.getDay();i++)html+='<div class="day blank"></div>';for(let d=1;d<=days;d++){const key=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,s=state.logs[key]?scoreFor(state.logs[key]):0;html+=`<button class="day ${key===todayKey()?'today':''} ${key===selectedDate?'selected':''}" data-date="${key}"><span>${d}</span><span>${s===100?'🤖':s===0?'':'•'}</span><span class="heat"><i style="width:${s}%"></i></span></button>`}calendarGrid.innerHTML=html;renderDaySummary()}
 function renderDaySummary(){const log=state.logs[selectedDate],s=log?scoreFor(log):0,m=mood(s),routine=weeklyPlan[dateFromKey(selectedDate).getDay()];const lang=state.settings.language||'ko';const dayRuns=(state.runs||[]).filter(r=>r?.endedAt&&keyFromDate(new Date(r.endedAt))===selectedDate).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));const runHtml=dayRuns.length?`<div class="calendar-run-list"><p class="eyebrow">${lang==='ko'?'이날의 러닝·걷기 기록':'RUN / WALK RECORDS'}</p>${dayRuns.map(r=>`<div class="run-history-card"><button class="run-history-main" type="button" data-calendar-run-story="${r.id}"><div><h3>${r.activityType==='walk'?(lang==='ko'?'걷기':'Walk'):(lang==='ko'?'러닝':'Run')}</h3><p>${formatClock(r.durationMs)} · ${paceText(runAveragePace(r))}/km</p></div><strong class="history-distance">${formatDistance(r.distanceKm)}</strong></button><button class="mini-edit share-run-btn" type="button" data-calendar-run-story="${r.id}">${lang==='ko'?'인증샷 만들기':'Create story'}</button></div>`).join('')}</div>`:'';daySummary.innerHTML=`<p class="eyebrow">${selectedDate}</p><h2>${escapeHtml(localizeWorkoutName(log?.planName||routine.name))}</h2><p class="muted">${m.emoji} ${s}% complete · ${log?.exercises?.length??routine.exercises.length} exercises</p>${log?`<p>Water ${log.water||0} ml · Sleep ${log.sleep||0} h · Protein ${log.protein||0} g</p>`:'<p>The weekly plan will be created when you open this day.</p>'}${runHtml}<button class="primary-btn" id="openSelectedDay">Open this workout</button>`;document.getElementById('openSelectedDay').onclick=()=>{activeDate=selectedDate;switchView('today');renderToday()};daySummary.querySelectorAll('[data-calendar-run-story]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openShareCard(btn.dataset.calendarRunStory)}))}
-let bodyTrendDays=7,runTrendDays=30,runTrendMetric='distance',runMonthFilter='2026-08';
+let bodyTrendDays=7,runTrendDays=30,runTrendMetric='distance',runMonthFilter='CURRENT',runHistoryType='ALL',runHistoryMin1k=true,runHistoryVisible=5;
 function trendDateLabel(value){const d=new Date(value);return `${d.getMonth()+1}/${d.getDate()}`}
 function trendSvg(rows,{valueKey,formatValue,paceMode=false}){
   if(!rows.length)return `<div class="trend-empty">${state.settings.language==='ko'?'표시할 기록이 아직 없어요.':'No records to chart yet.'}</div>`;
@@ -439,20 +439,45 @@ function renderTrendControls(){
 }
 function renderBodyTrend(){const el=document.getElementById('bodyTrendChart');if(!el)return;const rows=periodRows((state.body||[]).filter(x=>Number.isFinite(+x.weight)&&+x.weight>0).map(x=>({date:x.date,weight:+x.weight})).sort((a,b)=>new Date(a.date)-new Date(b.date)),bodyTrendDays);el.innerHTML=trendSvg(rows,{valueKey:'weight',formatValue:(v)=>`${v.toFixed(1)}kg`})}
 function runMonthKey(r){if(!r?.endedAt)return'';const d=new Date(r.endedAt);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
-function filteredProgressRuns(){return (state.runs||[]).filter(r=>(r.activityType||'run')==='run'&&r.endedAt&&(!runMonthFilter||runMonthFilter==='ALL'||runMonthKey(r)===runMonthFilter))}
-function ensureRunMonthFilter(){
-  const chart=document.getElementById('runTrendChart');if(!chart)return;
-  let wrap=document.getElementById('runMonthFilterWrap');
-  if(!wrap){wrap=document.createElement('div');wrap.id='runMonthFilterWrap';wrap.style.cssText='display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:8px 0 12px';wrap.innerHTML=`<label for="runMonthFilterSelect" style="font-size:12px;font-weight:800;opacity:.7">MONTH</label><select id="runMonthFilterSelect" style="min-width:132px;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:var(--card,#111);color:inherit;font:inherit"></select>`;chart.parentNode.insertBefore(wrap,chart)}
-  const sel=wrap.querySelector('#runMonthFilterSelect'),months=[...new Set((state.runs||[]).filter(r=>r?.endedAt).map(runMonthKey).filter(Boolean))].sort().reverse();
-  const lang=state.settings.language||'ko',current=`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
-  if(runMonthFilter!=='ALL'&&!months.includes(runMonthFilter))runMonthFilter=months.includes(current)?current:(months[0]||'ALL');
-  sel.innerHTML=`<option value="ALL">${lang==='ko'?'전체 기록':'All records'}</option>`+months.map(m=>{const [y,mo]=m.split('-');return `<option value="${m}">${lang==='ko'?`${y}년 ${+mo}월`:`${new Date(+y,+mo-1,1).toLocaleString('en',{month:'long',year:'numeric'})}`}</option>`}).join('');sel.value=runMonthFilter;
-  sel.onchange=()=>{runMonthFilter=sel.value;renderProgressRunHistory()};
+function currentRunMonthKey(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
+function filteredProgressRuns(){
+  const month=runMonthFilter==='CURRENT'?currentRunMonthKey():runMonthFilter;
+  return (state.runs||[]).filter(r=>{
+    if(!r?.endedAt)return false;
+    if(month!=='ALL'&&runMonthKey(r)!==month)return false;
+    const type=(r.activityType||'run')==='walk'?'WALK':'RUN';
+    if(runHistoryType!=='ALL'&&type!==runHistoryType)return false;
+    if(runHistoryMin1k&&(+r.distanceKm||0)<1)return false;
+    return true;
+  });
+}
+function ensureRunHistoryFilters(){
+  const history=document.getElementById('progressRunHistory');if(!history)return;
+  let wrap=document.getElementById('runHistoryFilterWrap');
+  if(!wrap){
+    wrap=document.createElement('div');wrap.id='runHistoryFilterWrap';
+    wrap.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 12px';
+    history.parentNode.insertBefore(wrap,history);
+  }
+  const lang=state.settings.language||'ko';
+  const months=[...new Set((state.runs||[]).filter(r=>r?.endedAt).map(runMonthKey).filter(Boolean))].sort().reverse();
+  const monthOptions=`<option value="CURRENT">${lang==='ko'?'이번 달':'This month'}</option><option value="ALL">${lang==='ko'?'전체 기간':'All dates'}</option>`+months.filter(m=>m!==currentRunMonthKey()).map(m=>{const [y,mo]=m.split('-');return `<option value="${m}">${lang==='ko'?`${y}년 ${+mo}월`:new Date(+y,+mo-1,1).toLocaleString('en',{month:'long',year:'numeric'})}</option>`}).join('');
+  wrap.innerHTML=`<select id="runHistoryMonth" aria-label="${lang==='ko'?'기간':'Period'}" style="flex:1;min-width:120px;padding:9px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:var(--card,#111);color:inherit;font:inherit">${monthOptions}</select><select id="runHistoryType" aria-label="${lang==='ko'?'운동 종류':'Activity'}" style="flex:1;min-width:120px;padding:9px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:var(--card,#111);color:inherit;font:inherit"><option value="ALL">${lang==='ko'?'전체 운동':'All activities'}</option><option value="RUN">RUNNING</option><option value="WALK">WALKING</option></select><label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;opacity:.82;white-space:nowrap"><input id="runHistoryMin1k" type="checkbox"> ${lang==='ko'?'1km 이상':'1km+'}</label>`;
+  const m=wrap.querySelector('#runHistoryMonth'),t=wrap.querySelector('#runHistoryType'),k=wrap.querySelector('#runHistoryMin1k');
+  m.value=runMonthFilter;t.value=runHistoryType;k.checked=runHistoryMin1k;
+  m.onchange=()=>{runMonthFilter=m.value;runHistoryVisible=5;renderProgressRunHistory()};
+  t.onchange=()=>{runHistoryType=t.value;runHistoryVisible=5;renderProgressRunHistory()};
+  k.onchange=()=>{runHistoryMin1k=k.checked;runHistoryVisible=5;renderProgressRunHistory()};
 }
 function renderRunTrend(){const el=document.getElementById('runTrendChart');if(!el)return;const graphRuns=(state.runs||[]).filter(r=>(r.activityType||'run')==='run'&&r.endedAt);const rows=periodRows(graphRuns.filter(r=>+r.distanceKm>0).map(r=>({date:r.endedAt,distance:+r.distanceKm,pace:runAveragePace(r),time:(+r.durationMs||0)/60000})).sort((a,b)=>new Date(a.date)-new Date(b.date)),runTrendDays);const cfg=runTrendMetric==='pace'?{valueKey:'pace',formatValue:(v)=>paceText(Math.max(0,Math.round(v)))}:runTrendMetric==='time'?{valueKey:'time',formatValue:(v)=>`${Math.round(v)}m`}:{valueKey:'distance',formatValue:(v)=>`${v.toFixed(2)}km`};el.innerHTML=trendSvg(rows,cfg)}
-function renderProgressRunHistory(){const el=document.getElementById('progressRunHistory');if(!el)return;const lang=state.settings.language||'ko',runs=filteredProgressRuns().slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));el.innerHTML=runs.length?runs.map(r=>`<div class="progress-run-row"><span><b>${new Date(r.endedAt).toLocaleDateString()}</b><small>${formatClock(r.durationMs)} · ${paceText(runAveragePace(r))}/km${r.manualRecovery?' · MANUAL':''}</small></span><strong>${formatDistance(r.distanceKm)}</strong></div>`).join(''):`<div class="trend-empty">${lang==='ko'?'선택한 월의 러닝 기록이 없어요.':'No running records for this month.'}</div>`}
-function renderProgress(){const keys=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return keyFromDate(d)});weeklyBars.innerHTML=keys.map(k=>{const s=state.logs[k]?scoreFor(state.logs[k]):0;return`<div class="bar-col"><div class="bar" style="height:${Math.max(s,2)}%"></div><small>${k.slice(8)}</small></div>`}).join('');ensureRunMonthFilter();renderTrendControls();renderBodyTrend();renderRunTrend();renderProgressRunHistory()}
+function renderProgressRunHistory(){
+  const el=document.getElementById('progressRunHistory');if(!el)return;ensureRunHistoryFilters();
+  const lang=state.settings.language||'ko',all=filteredProgressRuns().slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt)),runs=all.slice(0,runHistoryVisible);
+  if(!all.length){el.innerHTML=`<div class="trend-empty">${lang==='ko'?'선택한 조건의 운동 기록이 없어요.':'No activity records match these filters.'}</div>`;return}
+  el.innerHTML=runs.map(r=>`<div class="progress-run-row"><span><b>${new Date(r.endedAt).toLocaleDateString()}</b><small>${r.activityType==='walk'?(lang==='ko'?'걷기':'WALKING'):(lang==='ko'?'러닝':'RUNNING')} · ${formatClock(r.durationMs)} · ${paceText(runAveragePace(r))}/km${r.manualRecovery?' · MANUAL':''}</small></span><strong>${formatDistance(r.distanceKm)}</strong></div>`).join('')+(all.length>5?`<button type="button" id="runHistoryMoreBtn" class="secondary-btn" style="width:100%;margin-top:10px">${runHistoryVisible<all.length?(lang==='ko'?`더 보기 (${all.length-runHistoryVisible})`:`Show more (${all.length-runHistoryVisible})`):(lang==='ko'?'접기':'Show less')}</button>`:'');
+  document.getElementById('runHistoryMoreBtn')?.addEventListener('click',()=>{runHistoryVisible=runHistoryVisible<all.length?all.length:5;renderProgressRunHistory()});
+}
+function renderProgress(){const keys=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return keyFromDate(d)});weeklyBars.innerHTML=keys.map(k=>{const s=state.logs[k]?scoreFor(state.logs[k]):0;return`<div class="bar-col"><div class="bar" style="height:${Math.max(s,2)}%"></div><small>${k.slice(8)}</small></div>`}).join('');renderTrendControls();renderBodyTrend();renderRunTrend();renderProgressRunHistory()}
 document.getElementById('bodyTrendPeriod')?.addEventListener('click',e=>{const b=e.target.closest('button[data-days]');if(!b)return;bodyTrendDays=+b.dataset.days;renderTrendControls();renderBodyTrend()});
 document.getElementById('runTrendPeriod')?.addEventListener('click',e=>{const b=e.target.closest('button[data-days]');if(!b)return;runTrendDays=+b.dataset.days;renderTrendControls();renderRunTrend()});
 document.getElementById('runTrendMetric')?.addEventListener('click',e=>{const b=e.target.closest('button[data-metric]');if(!b)return;runTrendMetric=b.dataset.metric;renderTrendControls();renderRunTrend()});
