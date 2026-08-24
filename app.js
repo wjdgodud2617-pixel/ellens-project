@@ -88,74 +88,7 @@ const defaults={runs:[],settings:{name:'Ellen',sex:'female',age:37,height:160,cu
 const APP_TIME_ZONE='Asia/Seoul';
 let state=loadState(),runSession=null,runTimer=null,runWatchId=null,runWakeLock=null,activeDate=todayKey(),selectedDate=todayKey(),calendarCursor=new Date(),editingIndex=null,deferredPrompt=null,supabaseClient=null,currentUser=null,cloudHydrated=false,lastFinishedRunPreview=null;
 const LAST_RUN_SNAPSHOT_KEY='eldyn-last-run-snapshot-v1';
-// v1.2.22.18 — read-only iPhone recovery diagnostics.
-// Snapshot storage immediately, before any cloud hydration can change in-memory state.
-const ELDYN_RECOVERY_TARGET_DATE='2026-08-23';
-function captureRecoveryStorageSnapshot(){
-  const out={capturedAt:new Date().toISOString(),local:{},session:{}};
-  for(const [label,store] of [['local',localStorage],['session',sessionStorage]]){
-    try{for(let i=0;i<store.length;i++){const k=store.key(i);if(k)out[label][k]=store.getItem(k)}}catch(err){out[label]._error=String(err?.message||err)}
-  }
-  return out;
-}
-const ELDYN_RECOVERY_STORAGE_SNAPSHOT=captureRecoveryStorageSnapshot();
-function parseRecoveryJson(raw){try{return typeof raw==='string'?JSON.parse(raw):raw}catch{return raw}}
-function recoveryDateOfRun(r){
-  if(!r||typeof r!=='object')return '';
-  const direct=String(r.date||r.day||r.dateKey||'');if(/^2026-08-23(?:$|T)/.test(direct))return ELDYN_RECOVERY_TARGET_DATE;
-  for(const key of ['endedAt','startedAt','createdAt','savedAt','t']){
-    const v=r[key];if(!v)continue;const d=new Date(typeof v==='number'?v:v);if(!Number.isNaN(d.getTime())&&zonedDateKey(d)===ELDYN_RECOVERY_TARGET_DATE)return ELDYN_RECOVERY_TARGET_DATE;
-  }
-  return '';
-}
-function recoveryRunSummary(r,source){
-  const distanceKm=Number(r?.distanceKm ?? (Number(r?.distanceM)/1000));
-  const durationMs=Number(r?.durationMs ?? r?.elapsedMs ?? r?.workoutDurationMs ?? r?.movingDurationMs ?? 0);
-  const route=Array.isArray(r?.route)?r.route:[];
-  return {source,id:r?.id||'',date:recoveryDateOfRun(r),type:r?.activityType||r?.type||r?.activity||'',distanceKm:Number.isFinite(distanceKm)?distanceKm:null,durationMs:Number.isFinite(durationMs)?durationMs:null,routePoints:route.length,splits:Array.isArray(r?.splits)?r.splits.length:0,endedAt:r?.endedAt||'',startedAt:r?.startedAt||'',raw:r};
-}
-function scanRecoveryValue(value,path,found,seen,depth=0){
-  if(depth>9||value==null)return;
-  if(typeof value==='string'){
-    if(value.length>2&&(/[\[{]/.test(value[0])))scanRecoveryValue(parseRecoveryJson(value),path,found,seen,depth+1);
-    return;
-  }
-  if(typeof value!=='object'||seen.has(value))return;seen.add(value);
-  if(Array.isArray(value)){
-    value.forEach((v,i)=>scanRecoveryValue(v,`${path}[${i}]`,found,seen,depth+1));return;
-  }
-  const looksRun=!!(value.id&&(value.distanceKm!=null||value.distanceM!=null||Array.isArray(value.route)||value.endedAt||value.startedAt));
-  if(looksRun&&recoveryDateOfRun(value)===ELDYN_RECOVERY_TARGET_DATE){
-    const sig=String(value.id||'')+'|'+String(value.endedAt||value.startedAt||'')+'|'+String(value.distanceKm??value.distanceM??'');
-    if(!found.some(x=>x.sig===sig))found.push({sig,...recoveryRunSummary(value,path)});
-  }
-  for(const [k,v] of Object.entries(value))scanRecoveryValue(v,`${path}.${k}`,found,seen,depth+1);
-}
-function collectRecoveryDiagnostics(){
-  const found=[];
-  const snap=ELDYN_RECOVERY_STORAGE_SNAPSHOT;
-  for(const [area,entries] of [['local',snap.local],['session',snap.session]])for(const [k,raw] of Object.entries(entries||{}))scanRecoveryValue(parseRecoveryJson(raw),`${area}Storage.${k}`,found,new WeakSet());
-  // Also inspect current in-memory values without modifying them.
-  scanRecoveryValue(state,'memory.state',found,new WeakSet());
-  scanRecoveryValue(runSession,'memory.runSession',found,new WeakSet());
-  scanRecoveryValue(lastFinishedRunPreview,'memory.lastFinishedRunPreview',found,new WeakSet());
-  const keys=[...Object.keys(snap.local||{}).map(k=>'local:'+k),...Object.keys(snap.session||{}).map(k=>'session:'+k)];
-  return {capturedAt:snap.capturedAt,targetDate:ELDYN_RECOVERY_TARGET_DATE,found,keys,pending:(()=>{try{return parseRecoveryJson(snap.local?.[PENDING_RUN_SYNC_KEY]||'[]')}catch{return[]}})()};
-}
-function formatRecoveryDuration(ms){if(!Number.isFinite(ms)||ms<=0)return '—';return formatClock(ms)}
-function showRecoveryDiagnostics(){
-  const d=collectRecoveryDiagnostics();
-  let overlay=document.getElementById('eldynRecoveryOverlay');
-  if(!overlay){overlay=document.createElement('div');overlay.id='eldynRecoveryOverlay';overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.88);padding:18px;overflow:auto;color:#fff;font-family:system-ui,-apple-system,sans-serif';document.body.appendChild(overlay)}
-  const cards=d.found.map((r,i)=>`<div style="border:1px solid #39ff14;border-radius:14px;padding:12px;margin:10px 0;background:#0b0f0c"><b style="color:#39ff14">FOUND #${i+1}</b><div>Source: ${String(r.source).replace(/</g,'&lt;')}</div><div>Run ID: ${String(r.id||'—').replace(/</g,'&lt;')}</div><div>Type: ${String(r.type||'—').toUpperCase()}</div><div>Distance: ${r.distanceKm==null?'—':r.distanceKm.toFixed(3)+' km'}</div><div>Time: ${formatRecoveryDuration(r.durationMs)}</div><div>Route: ${r.routePoints} points · Splits: ${r.splits}</div><div>Ended: ${String(r.endedAt||'—')}</div></div>`).join('');
-  overlay.innerHTML=`<div style="max-width:620px;margin:auto"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><div><div style="font-size:12px;color:#39ff14;font-weight:800;letter-spacing:.12em">READ-ONLY DIAGNOSTIC</div><h2 style="margin:4px 0">RECOVERY CHECK · 8/23</h2></div><button id="eldynRecoveryClose" style="border:0;border-radius:12px;padding:10px 14px;background:#fff;color:#000;font-weight:800">닫기</button></div><p style="opacity:.78">Captured before cloud sync: ${d.capturedAt}</p><div style="font-size:30px;font-weight:900;color:${d.found.length?'#39ff14':'#ff665f'}">${d.found.length?'8/23 RUN FOUND':'8/23 RUN NOT FOUND'}</div>${cards||'<p>현재 아이폰 저장공간 snapshot에서 8/23 러닝 객체를 찾지 못했습니다.</p>'}<details style="margin-top:14px"><summary>검사한 저장 키 보기</summary><pre style="white-space:pre-wrap;font-size:11px;opacity:.75">${d.keys.join('\n')}</pre></details><button id="eldynRecoveryCopy" style="width:100%;margin-top:16px;border:0;border-radius:14px;padding:14px;background:#39ff14;color:#071007;font-weight:900">진단 결과 복사</button><p style="font-size:12px;opacity:.65">이 화면은 읽기만 하며 Supabase/localStorage 값을 수정하지 않습니다.</p></div>`;
-  overlay.querySelector('#eldynRecoveryClose').onclick=()=>overlay.remove();
-  overlay.querySelector('#eldynRecoveryCopy').onclick=async()=>{const text=JSON.stringify({...d,found:d.found.map(({raw,...rest})=>rest)},null,2);try{await navigator.clipboard.writeText(text);alert('진단 결과를 복사했어요.')}catch{prompt('아래 내용을 복사해 주세요.',text)}};
-}
-function installRecoveryCheckButton(){
-  if(document.getElementById('eldynRecoveryCheckBtn'))return;
-  const b=document.createElement('button');b.id='eldynRecoveryCheckBtn';b.type='button';b.textContent='RECOVERY CHECK';b.style.cssText='position:fixed;right:14px;bottom:92px;z-index:2147483000;border:0;border-radius:999px;padding:12px 16px;background:#39ff14;color:#071007;font:900 12px system-ui;box-shadow:0 8px 28px rgba(0,0,0,.35)';b.addEventListener('click',showRecoveryDiagnostics);document.body.appendChild(b);
-}
+// v1.2.22.22 — temporary recovery diagnostic UI removed.
 function saveLastRunSnapshot(run){if(!run)return;lastFinishedRunPreview=run;try{localStorage.setItem(LAST_RUN_SNAPSHOT_KEY,JSON.stringify(run))}catch(err){try{sessionStorage.setItem(LAST_RUN_SNAPSHOT_KEY,JSON.stringify(run))}catch{}}}
 function loadLastRunSnapshot(){for(const store of [localStorage,sessionStorage]){try{const raw=store.getItem(LAST_RUN_SNAPSHOT_KEY);if(raw){const r=JSON.parse(raw);if(r?.id)return r}}catch{}}return null}
 function allKnownRuns(){let runs=Array.isArray(state.runs)?state.runs:[];for(const log of Object.values(state.logs||{}))runs=mergeRuns(runs,log?.runs);const snap=lastFinishedRunPreview||loadLastRunSnapshot();if(snap)runs=mergeRuns(runs,[snap]);return runs}
@@ -480,7 +413,7 @@ function showCelebration(s){const m=mood(s);celebrationContent.innerHTML=`<div c
 function confetti(){for(let i=0;i<28;i++){const el=document.createElement('i');el.className='confetti';el.style.left=Math.random()*100+'vw';el.style.setProperty('--x',(Math.random()*180-90)+'px');el.style.animationDelay=Math.random()*.5+'s';document.body.appendChild(el);setTimeout(()=>el.remove(),2400)}}
 function renderCalendar(){const y=calendarCursor.getFullYear(),m=calendarCursor.getMonth();monthTitle.textContent=new Intl.DateTimeFormat('en',{month:'long',year:'numeric'}).format(calendarCursor);const first=new Date(y,m,1),days=new Date(y,m+1,0).getDate();let html='';for(let i=0;i<first.getDay();i++)html+='<div class="day blank"></div>';for(let d=1;d<=days;d++){const key=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,s=state.logs[key]?scoreFor(state.logs[key]):0;html+=`<button class="day ${key===todayKey()?'today':''} ${key===selectedDate?'selected':''}" data-date="${key}"><span>${d}</span><span>${s===100?'🤖':s===0?'':'•'}</span><span class="heat"><i style="width:${s}%"></i></span></button>`}calendarGrid.innerHTML=html;renderDaySummary()}
 function renderDaySummary(){const log=state.logs[selectedDate],s=log?scoreFor(log):0,m=mood(s),routine=weeklyPlan[dateFromKey(selectedDate).getDay()];const lang=state.settings.language||'ko';const dayRuns=(state.runs||[]).filter(r=>r?.endedAt&&keyFromDate(new Date(r.endedAt))===selectedDate).slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));const runHtml=dayRuns.length?`<div class="calendar-run-list"><p class="eyebrow">${lang==='ko'?'이날의 러닝·걷기 기록':'RUN / WALK RECORDS'}</p>${dayRuns.map(r=>`<div class="run-history-card"><button class="run-history-main" type="button" data-calendar-run-story="${r.id}"><div><h3>${r.activityType==='walk'?(lang==='ko'?'걷기':'Walk'):(lang==='ko'?'러닝':'Run')}</h3><p>${formatClock(r.durationMs)} · ${paceText(runAveragePace(r))}/km</p></div><strong class="history-distance">${formatDistance(r.distanceKm)}</strong></button><button class="mini-edit share-run-btn" type="button" data-calendar-run-story="${r.id}">${lang==='ko'?'인증샷 만들기':'Create story'}</button></div>`).join('')}</div>`:'';daySummary.innerHTML=`<p class="eyebrow">${selectedDate}</p><h2>${escapeHtml(localizeWorkoutName(log?.planName||routine.name))}</h2><p class="muted">${m.emoji} ${s}% complete · ${log?.exercises?.length??routine.exercises.length} exercises</p>${log?`<p>Water ${log.water||0} ml · Sleep ${log.sleep||0} h · Protein ${log.protein||0} g</p>`:'<p>The weekly plan will be created when you open this day.</p>'}${runHtml}<button class="primary-btn" id="openSelectedDay">Open this workout</button>`;document.getElementById('openSelectedDay').onclick=()=>{activeDate=selectedDate;switchView('today');renderToday()};daySummary.querySelectorAll('[data-calendar-run-story]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openShareCard(btn.dataset.calendarRunStory)}))}
-let bodyTrendDays=7,runTrendDays=7,runTrendMetric='distance',runMonthFilter='2026-08';
+let bodyTrendDays=7,runTrendDays=30,runTrendMetric='distance',runMonthFilter='2026-08';
 function trendDateLabel(value){const d=new Date(value);return `${d.getMonth()+1}/${d.getDate()}`}
 function trendSvg(rows,{valueKey,formatValue,paceMode=false}){
   if(!rows.length)return `<div class="trend-empty">${state.settings.language==='ko'?'표시할 기록이 아직 없어요.':'No records to chart yet.'}</div>`;
@@ -496,7 +429,12 @@ function trendSvg(rows,{valueKey,formatValue,paceMode=false}){
 function periodRows(rows,days){if(!days)return rows;const cutoff=Date.now()-(days-1)*86400000;return rows.filter(x=>new Date(x.date).getTime()>=cutoff)}
 function renderTrendControls(){
   document.querySelectorAll('#bodyTrendPeriod button').forEach(b=>b.classList.toggle('active',+b.dataset.days===bodyTrendDays));
-  document.querySelectorAll('#runTrendPeriod button').forEach(b=>b.classList.toggle('active',+b.dataset.days===runTrendDays));
+  const period=document.getElementById('runTrendPeriod');
+  if(period){
+    const wanted=[[30,'1M'],[90,'3M'],[180,'6M'],[365,'1Y']];
+    if(!period.dataset.v12222){period.innerHTML=wanted.map(([days,label])=>`<button type="button" data-days="${days}">${label}</button>`).join('');period.dataset.v12222='1'}
+    period.querySelectorAll('button[data-days]').forEach(b=>b.classList.toggle('active',+b.dataset.days===runTrendDays));
+  }
   document.querySelectorAll('#runTrendMetric button').forEach(b=>b.classList.toggle('active',b.dataset.metric===runTrendMetric));
 }
 function renderBodyTrend(){const el=document.getElementById('bodyTrendChart');if(!el)return;const rows=periodRows((state.body||[]).filter(x=>Number.isFinite(+x.weight)&&+x.weight>0).map(x=>({date:x.date,weight:+x.weight})).sort((a,b)=>new Date(a.date)-new Date(b.date)),bodyTrendDays);el.innerHTML=trendSvg(rows,{valueKey:'weight',formatValue:(v)=>`${v.toFixed(1)}kg`})}
@@ -510,9 +448,9 @@ function ensureRunMonthFilter(){
   const lang=state.settings.language||'ko',current=`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
   if(runMonthFilter!=='ALL'&&!months.includes(runMonthFilter))runMonthFilter=months.includes(current)?current:(months[0]||'ALL');
   sel.innerHTML=`<option value="ALL">${lang==='ko'?'전체 기록':'All records'}</option>`+months.map(m=>{const [y,mo]=m.split('-');return `<option value="${m}">${lang==='ko'?`${y}년 ${+mo}월`:`${new Date(+y,+mo-1,1).toLocaleString('en',{month:'long',year:'numeric'})}`}</option>`}).join('');sel.value=runMonthFilter;
-  sel.onchange=()=>{runMonthFilter=sel.value;renderRunTrend();renderProgressRunHistory()};
+  sel.onchange=()=>{runMonthFilter=sel.value;renderProgressRunHistory()};
 }
-function renderRunTrend(){const el=document.getElementById('runTrendChart');if(!el)return;const rows=periodRows(filteredProgressRuns().filter(r=>+r.distanceKm>0).map(r=>({date:r.endedAt,distance:+r.distanceKm,pace:runAveragePace(r),time:(+r.durationMs||0)/60000})).sort((a,b)=>new Date(a.date)-new Date(b.date)),runTrendDays);const cfg=runTrendMetric==='pace'?{valueKey:'pace',formatValue:(v)=>paceText(Math.max(0,Math.round(v)))}:runTrendMetric==='time'?{valueKey:'time',formatValue:(v)=>`${Math.round(v)}m`}:{valueKey:'distance',formatValue:(v)=>`${v.toFixed(2)}km`};el.innerHTML=trendSvg(rows,cfg)}
+function renderRunTrend(){const el=document.getElementById('runTrendChart');if(!el)return;const graphRuns=(state.runs||[]).filter(r=>(r.activityType||'run')==='run'&&r.endedAt);const rows=periodRows(graphRuns.filter(r=>+r.distanceKm>0).map(r=>({date:r.endedAt,distance:+r.distanceKm,pace:runAveragePace(r),time:(+r.durationMs||0)/60000})).sort((a,b)=>new Date(a.date)-new Date(b.date)),runTrendDays);const cfg=runTrendMetric==='pace'?{valueKey:'pace',formatValue:(v)=>paceText(Math.max(0,Math.round(v)))}:runTrendMetric==='time'?{valueKey:'time',formatValue:(v)=>`${Math.round(v)}m`}:{valueKey:'distance',formatValue:(v)=>`${v.toFixed(2)}km`};el.innerHTML=trendSvg(rows,cfg)}
 function renderProgressRunHistory(){const el=document.getElementById('progressRunHistory');if(!el)return;const lang=state.settings.language||'ko',runs=filteredProgressRuns().slice().sort((a,b)=>new Date(b.endedAt)-new Date(a.endedAt));el.innerHTML=runs.length?runs.map(r=>`<div class="progress-run-row"><span><b>${new Date(r.endedAt).toLocaleDateString()}</b><small>${formatClock(r.durationMs)} · ${paceText(runAveragePace(r))}/km${r.manualRecovery?' · MANUAL':''}</small></span><strong>${formatDistance(r.distanceKm)}</strong></div>`).join(''):`<div class="trend-empty">${lang==='ko'?'선택한 월의 러닝 기록이 없어요.':'No running records for this month.'}</div>`}
 function renderProgress(){const keys=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return keyFromDate(d)});weeklyBars.innerHTML=keys.map(k=>{const s=state.logs[k]?scoreFor(state.logs[k]):0;return`<div class="bar-col"><div class="bar" style="height:${Math.max(s,2)}%"></div><small>${k.slice(8)}</small></div>`}).join('');ensureRunMonthFilter();renderTrendControls();renderBodyTrend();renderRunTrend();renderProgressRunHistory()}
 document.getElementById('bodyTrendPeriod')?.addEventListener('click',e=>{const b=e.target.closest('button[data-days]');if(!b)return;bodyTrendDays=+b.dataset.days;renderTrendControls();renderBodyTrend()});
@@ -1625,7 +1563,6 @@ async function waitForSupabaseLibrary(timeoutMs=8000){
 async function bootstrapEldyn(){
   if(eldynBootstrapStarted)return;
   eldynBootstrapStarted=true;
-  try{installRecoveryCheckButton()}catch(error){console.warn('Recovery check UI failed:',error)}
   try{ensureAug23ManualRecovery()}catch(error){console.warn('Manual 8/23 recovery failed:',error)}
   try{
     render();
