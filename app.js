@@ -714,8 +714,22 @@ const shareEls={
   },
   metricSizeValues:{
     distance:document.getElementById('shareDistanceSizeValue'),pace:document.getElementById('sharePaceSizeValue'),time:document.getElementById('shareTimeSizeValue'),caption:document.getElementById('shareCaptionSizeValue')
-  }
+  },
+  textColor:null,displayChecks:{}
 };
+function ensureShareCustomizeControls(){
+  if(!shareEls.dialog||document.getElementById('eldynShareCustomize'))return;
+  const host=shareEls.canvas?.parentElement||shareEls.dialog;
+  const panel=document.createElement('section');panel.id='eldynShareCustomize';
+  panel.style.cssText='margin:14px 0;padding:14px;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:rgba(255,255,255,.035)';
+  panel.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><strong>${state.settings.language==='ko'?'표시 항목':'Visible items'}</strong><label style="display:flex;align-items:center;gap:8px"><span>${state.settings.language==='ko'?'텍스트 색상':'Text color'}</span><input id="shareTextColor" type="color" value="${state.settings.shareTextColor||'#ffffff'}" style="width:44px;height:36px;border:0;background:transparent"></label></div><div id="shareDisplayChecks" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 14px;margin-top:12px"></div>`;
+  host.insertAdjacentElement('afterend',panel);
+  const defs=[['activity','RUNNING / WALKING',true],['distance',state.settings.language==='ko'?'거리':'Distance',true],['pace',state.settings.language==='ko'?'평균 페이스':'Average pace',true],['time',state.settings.language==='ko'?'시간':'Time',true],['calories',state.settings.language==='ko'?'칼로리':'Calories',true],['date',state.settings.language==='ko'?'날짜':'Date',true],['route',state.settings.language==='ko'?'GPS 경로':'GPS route',true],['logo','ELDYN logo',true],['caption',state.settings.language==='ko'?'문구':'Caption',true],['splits',state.settings.language==='ko'?'1KM 구간':'1KM splits',true]];
+  const saved=state.settings.shareVisible||{};const wrap=panel.querySelector('#shareDisplayChecks');
+  defs.forEach(([key,label,def])=>{const lab=document.createElement('label');lab.style.cssText='display:flex;align-items:center;gap:8px;min-height:34px';const input=document.createElement('input');input.type='checkbox';input.checked=saved[key]??def;input.dataset.shareVisible=key;lab.append(input,document.createTextNode(label));wrap.append(lab);shareEls.displayChecks[key]=input;input.addEventListener('change',()=>{state.settings.shareVisible={...(state.settings.shareVisible||{}),[key]:input.checked};saveState();renderShareCard()})});
+  shareEls.textColor=panel.querySelector('#shareTextColor');shareEls.textColor.addEventListener('input',()=>{state.settings.shareTextColor=shareEls.textColor.value;saveState();renderShareCard()});
+}
+function shareVisible(key,def=true){return shareEls.displayChecks?.[key]?shareEls.displayChecks[key].checked:(state.settings.shareVisible?.[key]??def)}
 let shareRunRecord=null,sharePhotoImage=null,sharePhotoTransform={x:0,y:0,zoom:1},shareDrag=null,shareBounds={};
 const defaultStoryLayout={logo:{x:.50,y:.085},route:{x:.20,y:.49},distance:{x:.075,y:.70,scale:.88},pace:{x:.075,y:.79,scale:.88},time:{x:.075,y:.88,scale:.88},caption:{x:.075,y:.945,scale:.88},splits:{x:.68,y:.69,scale:.78},footer:{x:.925,y:.985}};
 function storyLayout(){const saved=state.settings.storyLayout||{};return Object.fromEntries(Object.entries(defaultStoryLayout).map(([k,v])=>[k,{...v,...(saved[k]||{})}]))}
@@ -1186,22 +1200,24 @@ function drawRouteOverlay(ctx,route,x,y,w,h,transparent=false,splits=[],showSpli
 let shareRenderToken=0;
 async function renderShareCard(){
   if(!shareRunRecord)return;const token=++shareRenderToken;
-  const ratio=shareEls.ratio.value,style=shareEls.style?.value||'photo',textScale=(+shareEls.textSize?.value||88)/100,routeScale=(+shareEls.routeSize?.value||80)/100,logoScale=(+shareEls.logoSize?.value||88)/100,showSplits=!!shareEls.showSplits?.checked&&Array.isArray(shareRunRecord?.splits)&&shareRunRecord.splits.length>0,splitScale=(+shareEls.splitsSize?.value||78)/100,sizes={story:[1080,1920],feed:[1080,1350],square:[1080,1080]},[w,h]=sizes[ratio];
+  ensureShareCustomizeControls();
+  const textColor=state.settings.shareTextColor||'#ffffff',ratio=shareEls.ratio.value,style=shareEls.style?.value||'photo',textScale=(+shareEls.textSize?.value||88)/100,routeScale=(+shareEls.routeSize?.value||80)/100,logoScale=(+shareEls.logoSize?.value||88)/100,showSplits=!!shareEls.showSplits?.checked&&Array.isArray(shareRunRecord?.splits)&&shareRunRecord.splits.length>0,splitScale=(+shareEls.splitsSize?.value||78)/100,sizes={story:[1080,1920],feed:[1080,1350],square:[1080,1080]},[w,h]=sizes[ratio];
   const c=shareEls.canvas,ctx=c.getContext('2d');if(c.width!==w)c.width=w;if(c.height!==h)c.height=h;const r=shareRunRecord,pad=w*.075,L=storyLayout();shareBounds={};
   const base=()=>{if(sharePhotoImage)coverImage(ctx,sharePhotoImage,w,h);else{const g=ctx.createLinearGradient(0,0,w,h);g.addColorStop(0,'#121a14');g.addColorStop(1,'#050706');ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}};base();
   if(style==='map'){ctx.fillStyle='#071007';ctx.fillRect(0,0,w,h);await drawRouteMap(ctx,r.route,pad,h*.16,w-pad*2,h*.49,34,r.splits,true)}
   else if(style==='split'){ctx.fillStyle='#071007';ctx.fillRect(w*.54,0,w*.46,h);await drawRouteMap(ctx,r.route,w*.56,h*.15,w*.39,h*.47,30,r.splits,true);if(sharePhotoImage){ctx.save();ctx.beginPath();ctx.rect(0,0,w*.54,h);ctx.clip();coverImage(ctx,sharePhotoImage,w*.54,h);ctx.restore()}}
   if(token!==shareRenderToken)return;
   if(style!=='photo'){const shade=ctx.createLinearGradient(0,0,0,h);shade.addColorStop(0,'rgba(0,0,0,.18)');shade.addColorStop(.48,'rgba(0,0,0,.08)');shade.addColorStop(1,'rgba(0,0,0,.88)');ctx.fillStyle=shade;ctx.fillRect(0,0,w,h)}
-  if(style==='photo'){const routeW=w*.32*routeScale,routeH=h*.18*routeScale,routeX=L.route.x*w-routeW/2,routeY=L.route.y*h-routeH/2;drawRouteOverlay(ctx,r.route,routeX,routeY,routeW,routeH,true,r.splits,true);shareBounds.route={x:routeX,y:routeY,w:routeW,h:routeH}}
-  const logoX=L.logo.x*w,logoY=L.logo.y*h;ctx.textAlign='center';ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.046*logoScale)}px system-ui`;ctx.fillText('ELDYN',logoX,logoY);ctx.font=`700 ${Math.round(w*.015*logoScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.84)';ctx.fillText('MOVE FORWARD',logoX,logoY+w*.030*logoScale);shareBounds.logo={x:logoX-w*.13*logoScale,y:logoY-w*.05*logoScale,w:w*.26*logoScale,h:w*.09*logoScale};
+  if(style==='photo'&&shareVisible('route')){const routeW=w*.32*routeScale,routeH=h*.18*routeScale,routeX=L.route.x*w-routeW/2,routeY=L.route.y*h-routeH/2;drawRouteOverlay(ctx,r.route,routeX,routeY,routeW,routeH,true,r.splits,true);shareBounds.route={x:routeX,y:routeY,w:routeW,h:routeH}}
+  if(shareVisible('logo')){const logoX=L.logo.x*w,logoY=L.logo.y*h;ctx.textAlign='center';ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.046*logoScale)}px system-ui`;ctx.fillText('ELDYN',logoX,logoY);ctx.font=`700 ${Math.round(w*.015*logoScale)}px system-ui`;ctx.fillStyle=textColor;ctx.globalAlpha=.84;ctx.fillText('MOVE FORWARD',logoX,logoY+w*.030*logoScale);ctx.globalAlpha=1;shareBounds.logo={x:logoX-w*.13*logoScale,y:logoY-w*.05*logoScale,w:w*.26*logoScale,h:w*.09*logoScale}};
   const activityLabel=r.activityType==='walk'?'WALKING':'RUNNING';
   ctx.textAlign='left';ctx.shadowColor='rgba(0,0,0,.42)';ctx.shadowBlur=4;
-  const drawMetric=(key,label,value)=>{const pos=L[key],scale=(pos.scale||.88),labelPx=Math.round(w*.019*scale),valuePx=Math.round(w*.054*scale);const x=pos.x*w,y=pos.y*h;ctx.fillStyle='rgba(255,255,255,.78)';ctx.font=`700 ${labelPx}px system-ui`;ctx.fillText(label,x,y);const valueY=y+labelPx+valuePx*.92;ctx.fillStyle='#fff';ctx.font=`900 ${valuePx}px system-ui`;ctx.fillText(value,x,valueY);shareBounds[key]={x:x-w*.02,y:y-labelPx*1.35,w:w*.48,h:labelPx+valuePx*1.35};};
+  const drawMetric=(key,label,value)=>{const pos=L[key],scale=(pos.scale||.88),labelPx=Math.round(w*.019*scale),valuePx=Math.round(w*.054*scale);const x=pos.x*w,y=pos.y*h;ctx.fillStyle=textColor;ctx.globalAlpha=.78;ctx.font=`700 ${labelPx}px system-ui`;ctx.fillText(label,x,y);const valueY=y+labelPx+valuePx*.92;ctx.fillStyle=textColor;ctx.globalAlpha=1;ctx.font=`900 ${valuePx}px system-ui`;ctx.fillText(value,x,valueY);shareBounds[key]={x:x-w*.02,y:y-labelPx*1.35,w:w*.48,h:labelPx+valuePx*1.35};};
   // Keep RUNNING / WALKING as a stable story title, matching the workout-story hierarchy.
-  const activityX=L.distance.x*w,activityY=Math.max(h*.08,L.distance.y*h-w*.075);ctx.fillStyle='#fff';ctx.font=`900 ${Math.round(w*.034)}px system-ui`;ctx.fillText(activityLabel,activityX,activityY);shareBounds.activity={x:activityX-w*.02,y:activityY-w*.045,w:w*.34,h:w*.06};
-  drawMetric('distance','DISTANCE',formatDistance(r.distanceKm));drawMetric('pace','PACE',`${paceText(runAveragePace(r))}/km`);drawMetric('time','TIME',formatClock(r.durationMs));
-  if(showSplits){
+  const visibleMetrics=[['distance','DISTANCE',formatDistance(r.distanceKm)],['pace','PACE',`${paceText(runAveragePace(r))}/km`],['time','TIME',formatClock(r.durationMs)]].filter(([k])=>shareVisible(k));
+  const metricBase=.70,metricStep=visibleMetrics.length<=1?.10:Math.min(.10,.18/Math.max(1,visibleMetrics.length-1));visibleMetrics.forEach(([k,label,value],i)=>{L[k]={...L[k],y:metricBase+i*metricStep};drawMetric(k,label,value)});
+  if(shareVisible('activity')){const anchor=visibleMetrics[0]?.[0]||'distance',activityX=L[anchor].x*w,activityY=Math.max(h*.08,(L[anchor].y||.70)*h-w*.075);ctx.fillStyle=textColor;ctx.globalAlpha=1;ctx.font=`900 ${Math.round(w*.034)}px system-ui`;ctx.fillText(activityLabel,activityX,activityY);shareBounds.activity={x:activityX-w*.02,y:activityY-w*.045,w:w*.34,h:w*.06}};
+  if(showSplits&&shareVisible('splits')){
     const splits=(r.splits||[]).filter(sp=>Number.isFinite(+sp.km)&&Number.isFinite(+sp.seconds)).sort((a,b)=>+a.km-+b.km);
     if(splits.length){
       const pos=L.splits||defaultStoryLayout.splits,x=pos.x*w,y=pos.y*h,scale=splitScale*(pos.scale||.78)/.78,rowH=Math.max(28,h*.026*scale),cols=splits.length>6?2:1,perCol=Math.ceil(splits.length/cols),panelW=w*(cols===2?.34:.18)*scale,panelH=(Math.min(perCol,6)+1)*rowH;
@@ -1209,8 +1225,8 @@ async function renderShareCard(){
       splits.forEach((sp,i)=>{const col=Math.floor(i/perCol),row=i%perCol,sx=x+col*(panelW/cols),sy=y+(row+1)*rowH;ctx.fillStyle='#b9ff3f';ctx.font=`900 ${Math.round(w*.020*scale)}px system-ui`;ctx.fillText(`${Math.round(+sp.km)}K`,sx,sy);ctx.fillStyle='#fff';ctx.font=`800 ${Math.round(w*.020*scale)}px system-ui`;ctx.fillText(paceText(+sp.seconds),sx+w*.055*scale,sy)});ctx.restore();shareBounds.splits={x:x-w*.03,y:y-h*.05,w:panelW+w*.04,h:panelH+h*.02};
     }
   }
-  const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim(),captionX=L.caption.x*w,captionY=L.caption.y*h,captionScale=(L.caption.scale||.88);ctx.font=`550 ${Math.round(w*.028*captionScale)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.96)';ctx.fillText(caption.slice(0,64),captionX,captionY);shareBounds.caption={x:captionX-w*.02,y:captionY-w*.04,w:w*.82,h:w*.06};
-  ctx.font=`650 ${Math.round(w*.019*.88)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.82)';ctx.fillText(`${new Date(r.endedAt).toLocaleDateString()}  ·  ${r.calories} KCAL`,pad,h-pad*.92);ctx.shadowBlur=0;ctx.textAlign='left';if(style!=='photo'){ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)}
+  if(shareVisible('caption')){const caption=(shareEls.caption.value||'Today, I showed up. (ง •̀_•́)ง').trim(),captionX=L.caption.x*w,captionY=L.caption.y*h,captionScale=(L.caption.scale||.88);ctx.font=`550 ${Math.round(w*.028*captionScale)}px system-ui`;ctx.fillStyle=textColor;ctx.globalAlpha=.96;ctx.fillText(caption.slice(0,64),captionX,captionY);ctx.globalAlpha=1;shareBounds.caption={x:captionX-w*.02,y:captionY-w*.04,w:w*.82,h:w*.06}};
+  const footerParts=[];if(shareVisible('date'))footerParts.push(new Date(r.endedAt).toLocaleDateString());if(shareVisible('calories'))footerParts.push(`${r.calories} KCAL`);if(footerParts.length){ctx.font=`650 ${Math.round(w*.019*.88)}px system-ui`;ctx.fillStyle=textColor;ctx.globalAlpha=.82;ctx.fillText(footerParts.join('  ·  '),pad,h-pad*.92);ctx.globalAlpha=1};ctx.shadowBlur=0;ctx.textAlign='left';if(style!=='photo'){ctx.font=`500 ${Math.round(w*.016)}px system-ui`;ctx.fillStyle='rgba(255,255,255,.45)';ctx.fillText('Map © OpenStreetMap contributors',pad,h-pad*.48)}
 }
 function openShareCard(id){
   // v1.2.22.7: invalidate any in-flight preview render and clear the old canvas
@@ -1234,6 +1250,7 @@ function openShareCard(id){
     alert(state.settings.language==='ko'?'러닝 인증샷 편집 화면을 불러오지 못했어요. 앱을 새로고침해 주세요.':'The run story editor is unavailable. Refresh the app.');
     return;
   }
+  ensureShareCustomizeControls();
   shareEls.caption.value=state.settings.language==='en'?'Today, I showed up. (ง •̀_•́)ง':'오늘도 해냈다. (ง •̀_•́)ง';
   sharePhotoImage=null;sharePhotoTransform={x:0,y:0,zoom:1};
   if(shareEls.photoSize)shareEls.photoSize.value='100';
