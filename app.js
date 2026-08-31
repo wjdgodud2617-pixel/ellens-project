@@ -807,7 +807,12 @@ function appendKmSplitCrossings(beforeM,afterM,fromPoint,toPoint,fromClockMs,toC
   while(nextKm*1000<=afterM+0.001){
     const boundary=nextKm*1000;if(boundary<=beforeM){nextKm++;continue}
     const f=Math.max(0,Math.min(1,(boundary-beforeM)/span));
-    const splitClock=clockA+(clockB-clockA)*f,prevClock=splitElapsedMsFallback();
+    // Split timing starts from the first accepted GPS movement, not from the moment
+    // the Start button was pressed. This prevents the 1st km pace from being inflated
+    // by GPS acquisition / standing-still time before the runner actually moves.
+    if(runSession.splitClockOffsetMs==null)runSession.splitClockOffsetMs=clockA;
+    const rawSplitClock=clockA+(clockB-clockA)*f;
+    const splitClock=Math.max(0,rawSplitClock-runSession.splitClockOffsetMs),prevClock=splitElapsedMsFallback();
     const lat=Number(fromPoint?.lat)+(Number(toPoint?.lat)-Number(fromPoint?.lat))*f;
     const lon=Number(fromPoint?.lon)+(Number(toPoint?.lon)-Number(fromPoint?.lon))*f;
     const t=Number(fromPoint?.t)+(Number(toPoint?.t)-Number(fromPoint?.t))*f;
@@ -1053,7 +1058,7 @@ function ensureGpsFresh(){
 function beginRun(){
   const gpsEnabled=runEls.gpsToggle.checked;
   if(gpsEnabled&&!window.isSecureContext)return alert('GPS requires HTTPS. Open the Vercel URL, or switch GPS off.');
-  runSession={sessionId:crypto.randomUUID(),status:'running',activityType:runEls.activityType?.value||'run',gpsEnabled,autoPauseEnabled:runEls.autoPause.checked,autoPaused:false,startedAt:new Date().toISOString(),segmentStartedAt:Date.now(),elapsedBefore:0,movingMs:0,movingSegmentAt:Date.now(),distanceM:0,lastPoint:null,distancePoint:null,currentPace:Infinity,topSpeedMps:0,accuracy:null,hasFix:false,lastGpsAt:null,resumeCount:0,backgroundRecoveredM:0,backgroundRecoveryCount:0,speedSamples:[],splits:[],route:[]};saveActiveRun('start');
+  runSession={sessionId:crypto.randomUUID(),status:'running',activityType:runEls.activityType?.value||'run',gpsEnabled,autoPauseEnabled:runEls.autoPause.checked,autoPaused:false,startedAt:new Date().toISOString(),segmentStartedAt:Date.now(),elapsedBefore:0,movingMs:0,movingSegmentAt:Date.now(),distanceM:0,lastPoint:null,distancePoint:null,currentPace:Infinity,topSpeedMps:0,accuracy:null,hasFix:false,lastGpsAt:null,resumeCount:0,backgroundRecoveredM:0,backgroundRecoveryCount:0,speedSamples:[],splits:[],splitClockOffsetMs:null,route:[]};saveActiveRun('start');
   if(gpsEnabled)startGps();requestWakeLock();requestRunNoticePermission().then(ok=>{if(ok)showRunCompanionNotification(true)});runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000);renderRun();setTimeout(()=>enterRunMode(),120)
 }
 function togglePause(){
