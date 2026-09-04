@@ -1230,7 +1230,17 @@ async function renderShareCard(){
   const drawMetric=(key,label,value)=>{const pos=L[key],scale=(pos.scale||.88),labelPx=Math.round(w*.019*scale),valuePx=Math.round(w*.054*scale);const x=pos.x*w,y=pos.y*h;ctx.fillStyle=textColor;ctx.globalAlpha=.78;ctx.font=`700 ${labelPx}px system-ui`;ctx.fillText(label,x,y);const valueY=y+labelPx+valuePx*.92;ctx.fillStyle=textColor;ctx.globalAlpha=1;ctx.font=`900 ${valuePx}px system-ui`;ctx.fillText(value,x,valueY);shareBounds[key]={x:x-w*.02,y:y-labelPx*1.35,w:w*.48,h:labelPx+valuePx*1.35};};
   // Keep RUNNING / WALKING as a stable story title, matching the workout-story hierarchy.
   const visibleMetrics=[['distance','DISTANCE',formatDistance(r.distanceKm)],['pace','PACE',`${paceText(runAveragePace(r))}/km`],['time','TIME',formatClock(r.durationMs)]].filter(([k])=>shareVisible(k));
-  const metricBase=.70,metricStep=visibleMetrics.length<=1?.10:Math.min(.10,.18/Math.max(1,visibleMetrics.length-1));visibleMetrics.forEach(([k,label,value],i)=>{L[k]={...L[k],y:metricBase+i*metricStep};drawMetric(k,label,value)});
+  // v1.2.22.28: preserve a user's vertical position for DISTANCE / PACE / TIME.
+  // Previously this auto-layout assignment overwrote L[k].y on every render, so the Y slider
+  // appeared to move but the metric immediately snapped back to .70/.79/.88.
+  const metricBase=.70,metricStep=visibleMetrics.length<=1?.10:Math.min(.10,.18/Math.max(1,visibleMetrics.length-1));
+  visibleMetrics.forEach(([k,label,value],i)=>{
+    const savedMetric=state.settings.storyLayout?.[k];
+    const defaultMetric=defaultStoryLayout[k]||{};
+    const hasCustomY=savedMetric&&Number.isFinite(+savedMetric.y)&&Math.abs((+savedMetric.y)-(+defaultMetric.y||0))>.0001;
+    if(!hasCustomY)L[k]={...L[k],y:metricBase+i*metricStep};
+    drawMetric(k,label,value);
+  });
   if(shareVisible('activity')){const anchor=visibleMetrics[0]?.[0]||'distance',activityX=L[anchor].x*w,activityY=Math.max(h*.08,(L[anchor].y||.70)*h-w*.075);ctx.fillStyle=textColor;ctx.globalAlpha=1;ctx.font=`900 ${Math.round(w*.034)}px system-ui`;ctx.fillText(activityLabel,activityX,activityY);shareBounds.activity={x:activityX-w*.02,y:activityY-w*.045,w:w*.34,h:w*.06}};
   if(showSplits&&shareVisible('splits')){
     const splits=(r.splits||[]).filter(sp=>Number.isFinite(+sp.km)&&Number.isFinite(+sp.seconds)).sort((a,b)=>+a.km-+b.km);
