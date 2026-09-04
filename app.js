@@ -722,12 +722,18 @@ function ensureShareCustomizeControls(){
   const host=shareEls.canvas?.parentElement||shareEls.dialog;
   const panel=document.createElement('section');panel.id='eldynShareCustomize';
   panel.style.cssText='margin:14px 0;padding:14px;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:rgba(255,255,255,.035)';
-  panel.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><strong>${state.settings.language==='ko'?'표시 항목':'Visible items'}</strong><label style="display:flex;align-items:center;gap:8px"><span>${state.settings.language==='ko'?'텍스트 색상':'Text color'}</span><input id="shareTextColor" type="color" value="${state.settings.shareTextColor||'#ffffff'}" style="width:44px;height:36px;border:0;background:transparent"></label></div><div id="shareDisplayChecks" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 14px;margin-top:12px"></div>`;
+  panel.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><strong>${state.settings.language==='ko'?'표시 항목':'Visible items'}</strong><label style="display:flex;align-items:center;gap:8px"><span>${state.settings.language==='ko'?'텍스트 색상':'Text color'}</span><input id="shareTextColor" type="color" value="${state.settings.shareTextColor||'#ffffff'}" style="width:44px;height:36px;border:0;background:transparent"></label></div><div id="shareDisplayChecks" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 14px;margin-top:12px"></div><div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12)"><strong>${state.settings.language==='ko'?'위치 조정':'Position'}</strong><select id="shareDynamicEditTarget" style="width:100%;margin-top:9px;padding:10px;border-radius:10px;background:#101411;color:inherit;border:1px solid rgba(255,255,255,.15)"><option value="distance">${state.settings.language==='ko'?'거리':'Distance'}</option><option value="pace">${state.settings.language==='ko'?'평균 페이스':'Average pace'}</option><option value="time">${state.settings.language==='ko'?'시간':'Time'}</option><option value="caption">${state.settings.language==='ko'?'문구':'Caption'}</option><option value="route">${state.settings.language==='ko'?'GPS 경로':'GPS route'}</option><option value="logo">ELDYN logo</option><option value="splits">${state.settings.language==='ko'?'1KM 구간':'1KM splits'}</option><option value="photo">${state.settings.language==='ko'?'배경 사진':'Photo'}</option></select><label style="display:grid;grid-template-columns:54px 1fr 44px;gap:8px;align-items:center;margin-top:10px"><span>${state.settings.language==='ko'?'좌우':'X'}</span><input id="shareDynamicPositionX" type="range" min="3" max="97" value="50"><output id="shareDynamicPositionXValue">50%</output></label><label style="display:grid;grid-template-columns:54px 1fr 44px;gap:8px;align-items:center;margin-top:8px"><span>${state.settings.language==='ko'?'상하':'Y'}</span><input id="shareDynamicPositionY" type="range" min="3" max="97" value="50"><output id="shareDynamicPositionYValue">50%</output></label><small style="display:block;margin-top:8px;opacity:.65">${state.settings.language==='ko'?'사진 위 요소를 직접 드래그해도 이동할 수 있어요.':'You can also drag items directly on the photo.'}</small></div>`;
   host.insertAdjacentElement('afterend',panel);
   const defs=[['activity','RUNNING / WALKING',true],['distance',state.settings.language==='ko'?'거리':'Distance',true],['pace',state.settings.language==='ko'?'평균 페이스':'Average pace',true],['time',state.settings.language==='ko'?'시간':'Time',true],['calories',state.settings.language==='ko'?'칼로리':'Calories',true],['date',state.settings.language==='ko'?'날짜':'Date',true],['route',state.settings.language==='ko'?'GPS 경로':'GPS route',true],['logo','ELDYN logo',true],['caption',state.settings.language==='ko'?'문구':'Caption',true],['splits',state.settings.language==='ko'?'1KM 구간':'1KM splits',true]];
   const saved=state.settings.shareVisible||{};const wrap=panel.querySelector('#shareDisplayChecks');
   defs.forEach(([key,label,def])=>{const lab=document.createElement('label');lab.style.cssText='display:flex;align-items:center;gap:8px;min-height:34px';const input=document.createElement('input');input.type='checkbox';input.checked=saved[key]??def;input.dataset.shareVisible=key;lab.append(input,document.createTextNode(label));wrap.append(lab);shareEls.displayChecks[key]=input;input.addEventListener('change',()=>{state.settings.shareVisible={...(state.settings.shareVisible||{}),[key]:input.checked};saveState();renderShareCard()})});
   shareEls.textColor=panel.querySelector('#shareTextColor');shareEls.textColor.addEventListener('input',()=>{state.settings.shareTextColor=shareEls.textColor.value;saveState();renderShareCard()});
+  // v1.2.22.27: provide working X/Y controls even when the host HTML does not contain the older position controls.
+  const dynTarget=panel.querySelector('#shareDynamicEditTarget'),dynX=panel.querySelector('#shareDynamicPositionX'),dynY=panel.querySelector('#shareDynamicPositionY'),dynXV=panel.querySelector('#shareDynamicPositionXValue'),dynYV=panel.querySelector('#shareDynamicPositionYValue');
+  const syncDynamicPosition=()=>{const key=dynTarget.value;if(key==='photo'){dynX.value=Math.round((sharePhotoTransform.x+1)*50);dynY.value=Math.round((sharePhotoTransform.y+1)*50)}else{const pos=storyLayout()[key]||{x:.5,y:.5};dynX.value=Math.round(clamp01(pos.x)*100);dynY.value=Math.round(clamp01(pos.y)*100)}dynXV.textContent=`${dynX.value}%`;dynYV.textContent=`${dynY.value}%`};
+  const applyDynamicPosition=(save=false)=>{const key=dynTarget.value;if(key==='photo'){sharePhotoTransform.x=Math.max(-1,Math.min(1,(+dynX.value/50)-1));sharePhotoTransform.y=Math.max(-1,Math.min(1,(+dynY.value/50)-1))}else{state.settings.storyLayout=state.settings.storyLayout||{};const current=storyLayout()[key]||{};state.settings.storyLayout[key]={...current,x:clamp01((+dynX.value||50)/100),y:clamp01((+dynY.value||50)/100)}}dynXV.textContent=`${dynX.value}%`;dynYV.textContent=`${dynY.value}%`;queueStoryRender();if(save)saveState()};
+  dynTarget.addEventListener('change',()=>{if(shareEls.editTarget)shareEls.editTarget.value=dynTarget.value;syncDynamicPosition()});
+  dynX.addEventListener('input',()=>applyDynamicPosition(false),{passive:true});dynY.addEventListener('input',()=>applyDynamicPosition(false),{passive:true});dynX.addEventListener('change',()=>applyDynamicPosition(true));dynY.addEventListener('change',()=>applyDynamicPosition(true));syncDynamicPosition();
 }
 function shareVisible(key,def=true){return shareEls.displayChecks?.[key]?shareEls.displayChecks[key].checked:(state.settings.shareVisible?.[key]??def)}
 let shareRunRecord=null,sharePhotoImage=null,sharePhotoTransform={x:0,y:0,zoom:1},shareDrag=null,shareBounds={};
@@ -997,7 +1003,14 @@ function onGps(pos){
   runSession.accuracy=p.accuracy;runSession.hasFix=true;runSession.lastGpsAt=p.t;
   if(runSession.awaitingResumeFix&&!runSession.pendingResumeBridge){runSession.awaitingResumeFix=false;if(!runSession.autoPaused&&!runSession.movingSegmentAt)runSession.movingSegmentAt=Date.now()}
   // Poor fixes create large jumps. Keep the UI status, but do not use them for distance.
-  if(p.accuracy>50){renderRun();return}
+  if(p.accuracy>30){renderRun();return}
+  if(runSession.awaitingManualResumeFix){
+    // Manual pause/resume: the first good fix is a fresh anchor only. Never bridge
+    // the paused gap into distance or split time. This prevents post-resume pace drift.
+    runSession.awaitingManualResumeFix=false;runSession.pauseAnchor=null;runSession.lastPoint=p;runSession.distancePoint=p;runSession.distancePointClockMs=elapsedMs();
+    runSession.speedSamples=[];runSession.currentPace=Infinity;runSession.route.push({lat:p.lat,lon:p.lon,accuracy:p.accuracy,t:p.t,resumed:true});
+    saveActiveRun('manual-resume-fix');renderRun();return;
+  }
   if(recoverBackgroundGap(p)){saveActiveRun();renderRun();return}
 
   const observedPrev=runSession.lastPoint;
@@ -1041,10 +1054,12 @@ function onGps(pos){
       if(delta>=minMove&&delta<maxSegment&&segmentSpeed<=maxSpeed){
         const beforeDistance=runSession.distanceM||0;
         const clockEnd=elapsedMs();
-        const segmentMs=Math.max(0,p.t-distancePrev.t);
-        const clockStart=Math.max(0,clockEnd-segmentMs);
+        // elapsedMs() excludes manual pause time. Anchor each accepted GPS point to that
+        // active workout clock so a pause/resume can never leak wall-clock time into splits.
+        const priorAcceptedClock=Number(runSession.distancePointClockMs);
+        const clockStart=Number.isFinite(priorAcceptedClock)?Math.min(clockEnd,priorAcceptedClock):Math.max(0,clockEnd-Math.max(0,p.t-distancePrev.t));
         runSession.distanceM+=delta;
-        runSession.distancePoint=p;
+        runSession.distancePoint=p;runSession.distancePointClockMs=clockEnd;
         runSession.currentPace=smooth>.3?1000/smooth:Infinity;
         if(smooth>.3)runSession.topSpeedMps=Math.max(runSession.topSpeedMps||0,smooth);
         runSession.route.push({lat:p.lat,lon:p.lon,accuracy:p.accuracy,t:p.t});
@@ -1053,7 +1068,7 @@ function onGps(pos){
     }
   }else{
     runSession.route.push({lat:p.lat,lon:p.lon,accuracy:p.accuracy,t:p.t});
-    runSession.distancePoint=p
+    runSession.distancePoint=p;runSession.distancePointClockMs=elapsedMs()
   }
   runSession.lastPoint=p;saveActiveRun();renderRun()
 }
@@ -1072,13 +1087,13 @@ function ensureGpsFresh(){
 function beginRun(){
   const gpsEnabled=runEls.gpsToggle.checked;
   if(gpsEnabled&&!window.isSecureContext)return alert('GPS requires HTTPS. Open the Vercel URL, or switch GPS off.');
-  runSession={sessionId:crypto.randomUUID(),status:'running',activityType:runEls.activityType?.value||'run',gpsEnabled,autoPauseEnabled:runEls.autoPause.checked,autoPaused:false,startedAt:new Date().toISOString(),segmentStartedAt:Date.now(),elapsedBefore:0,movingMs:0,movingSegmentAt:Date.now(),distanceM:0,lastPoint:null,distancePoint:null,currentPace:Infinity,topSpeedMps:0,accuracy:null,hasFix:false,lastGpsAt:null,resumeCount:0,backgroundRecoveredM:0,backgroundRecoveryCount:0,speedSamples:[],splits:[],splitClockOffsetMs:null,route:[]};saveActiveRun('start');
+  runSession={sessionId:crypto.randomUUID(),status:'running',activityType:runEls.activityType?.value||'run',gpsEnabled,autoPauseEnabled:runEls.autoPause.checked,autoPaused:false,startedAt:new Date().toISOString(),segmentStartedAt:Date.now(),elapsedBefore:0,movingMs:0,movingSegmentAt:Date.now(),distanceM:0,lastPoint:null,distancePoint:null,currentPace:Infinity,topSpeedMps:0,accuracy:null,hasFix:false,lastGpsAt:null,resumeCount:0,backgroundRecoveredM:0,backgroundRecoveryCount:0,speedSamples:[],splits:[],splitClockOffsetMs:null,distancePointClockMs:null,awaitingManualResumeFix:false,pauseAnchor:null,route:[]};saveActiveRun('start');
   if(gpsEnabled)startGps();requestWakeLock();requestRunNoticePermission().then(ok=>{if(ok)showRunCompanionNotification(true)});runTimer=setInterval(()=>{renderRun();saveActiveRun()},1000);renderRun();setTimeout(()=>enterRunMode(),120)
 }
 function togglePause(){
   if(!runSession)return;
-  if(runSession.status==='running'){runSession.elapsedBefore=elapsedMs();if(runSession.movingSegmentAt){runSession.movingMs=movingMs();runSession.movingSegmentAt=null}runSession.status='paused';runSession.autoPaused=false;runSession.lastPoint=null;runSession.distancePoint=null;stopGps();releaseWakeLock();clearRunCompanionNotification();saveActiveRun()}
-  else{runSession.status='running';runSession.segmentStartedAt=Date.now();runSession.movingSegmentAt=Date.now();if(runSession.gpsEnabled)startGps();requestWakeLock();showRunCompanionNotification(true);saveActiveRun()}
+  if(runSession.status==='running'){runSession.elapsedBefore=elapsedMs();if(runSession.movingSegmentAt){runSession.movingMs=movingMs();runSession.movingSegmentAt=null}runSession.status='paused';runSession.autoPaused=false;runSession.pauseAnchor=runSession.distancePoint||runSession.lastPoint||null;runSession.lastPoint=null;runSession.distancePoint=null;runSession.awaitingManualResumeFix=false;stopGps();releaseWakeLock();clearRunCompanionNotification();saveActiveRun()}
+  else{runSession.status='running';runSession.segmentStartedAt=Date.now();runSession.movingSegmentAt=Date.now();runSession.awaitingManualResumeFix=!!runSession.gpsEnabled;runSession.lastPoint=null;runSession.distancePoint=null;runSession.speedSamples=[];runSession.currentPace=Infinity;if(runSession.gpsEnabled)startGps();requestWakeLock();showRunCompanionNotification(true);saveActiveRun()}
   renderRun()
 }
 let finishRunInProgress=false;
